@@ -1,0 +1,183 @@
+{
+ "schema": "fp.plan/0.1",
+ "source": {
+  "input": "lidar",
+  "scale": "LiDAR depth (metric)",
+  "n_frames": 956,
+  "dataset": "ARKitScenes",
+  "video_id": "48018560"
+ },
+ "rooms": [
+  {
+   "polygon": [
+    [
+     -1.6892,
+     -0.7851
+    ],
+    [
+     -0.7677,
+     -0.7851
+    ],
+    [
+     -0.7677,
+     -1.4327
+    ],
+    [
+     0.8534,
+     -1.4327
+    ],
+    [
+     0.8534,
+     1.9673
+    ],
+    [
+     -1.6892,
+     1.9673
+    ]
+   ],
+   "walls": [
+    {
+     "id": "W1",
+     "p0": [
+      -1.6892,
+      -0.7851
+     ],
+     "p1": [
+      -0.7677,
+      -0.7851
+     ],
+     "length_m": 0.921,
+     "axis": "y",
+     "coord": -0.7851,
+     "observed": true,
+     "coverage": 1.0,
+     "confidence": 0.48
+    },
+    {
+     "id": "W2",
+     "p0": [
+      -0.7677,
+      -0.7851
+     ],
+     "p1": [
+      -0.7677,
+      -1.4327
+     ],
+     "length_m": 0.648,
+     "axis": "x",
+     "coord": -0.7677,
+     "observed": true,
+     "coverage": 0.33,
+     "confidence": 0.27
+    },
+    {
+     "id": "W3",
+     "p0": [
+      -0.7677,
+      -1.4327
+     ],
+     "p1": [
+      0.8534,
+      -1.4327
+     ],
+     "length_m": 1.621,
+     "axis": "y",
+     "coord": -1.4327,
+     "observed": false,
+     "coverage": 0.0,
+     "confidence": 0.48
+    },
+    {
+     "id": "W4",
+     "p0": [
+      0.8534,
+      -1.4327
+     ],
+     "p1": [
+      0.8534,
+      1.9673
+     ],
+     "length_m": 3.4,
+     "axis": "x",
+     "coord": 0.8534,
+     "observed": true,
+     "coverage": 0.88,
+     "confidence": 0.27
+    },
+    {
+     "id": "W5",
+     "p0": [
+      0.8534,
+      1.9673
+     ],
+     "p1": [
+      -1.6892,
+      1.9673
+     ],
+     "length_m": 2.543,
+     "axis": "y",
+     "coord": 1.9673,
+     "observed": false,
+     "coverage": 0.0,
+     "confidence": 0.82
+    },
+    {
+     "id": "W6",
+     "p0": [
+      -1.6892,
+      1.9673
+     ],
+     "p1": [
+      -1.6892,
+      -0.7851
+     ],
+     "length_m": 2.752,
+     "axis": "x",
+     "coord": -1.6892,
+     "observed": true,
+     "coverage": 0.98,
+     "confidence": 0.27
+    }
+   ],
+   "area_m2": 8.05,
+   "extent_x_m": 2.543,
+   "extent_y_m": 3.4,
+   "ceiling_h_m": 4.212,
+   "n_wall_candidates": 17,
+   "name": "Room 1"
+  }
+ ],
+ "connections": [],
+ "damage": [],
+ "debug": {
+  "yaw_deg": 0.25,
+  "n_points": 648679,
+  "runtime_s": 8.2
+ },
+ "T_plan_world": [
+  [
+   0.004363,
+   0.0,
+   0.99999,
+   0.0
+  ],
+  [
+   0.99999,
+   0.0,
+   -0.004363,
+   0.0
+  ],
+  [
+   0.0,
+   1.0,
+   0.0,
+   0.881823
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ]
+}

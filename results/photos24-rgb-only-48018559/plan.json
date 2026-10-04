@@ -1,0 +1,288 @@
+{
+ "schema": "fp.plan/0.3",
+ "source": {
+  "input": "photos",
+  "scale": "MapAnything metric depth (learned)",
+  "n_frames": 24,
+  "gravity": "estimated",
+  "floor": "detected",
+  "frame_filter": {},
+  "dataset": "ARKitScenes",
+  "video_id": "48018559",
+  "rgb_only": true,
+  "mapanything_scale": 1.375
+ },
+ "layout": "1 room(s) split at doorways",
+ "rooms": [
+  {
+   "polygon": [
+    [
+     -1.1266,
+     4.3508
+    ],
+    [
+     -1.1266,
+     0.5244
+    ],
+    [
+     -0.7212,
+     0.5244
+    ],
+    [
+     -0.7212,
+     -1.2075
+    ],
+    [
+     0.3683,
+     -1.2075
+    ],
+    [
+     0.3683,
+     0.8666
+    ],
+    [
+     0.7976,
+     0.8666
+    ],
+    [
+     0.7976,
+     2.7951
+    ],
+    [
+     1.6947,
+     2.7951
+    ],
+    [
+     1.6947,
+     4.3508
+    ]
+   ],
+   "walls": [
+    {
+     "id": "W1",
+     "p0": [
+      -1.1266,
+      4.3508
+     ],
+     "p1": [
+      -1.1266,
+      0.5244
+     ],
+     "length_m": 3.826,
+     "axis": "x",
+     "coord": -1.1266,
+     "observed": true,
+     "coverage": 0.63,
+     "spread_cm": 5.9,
+     "confidence": 0.02
+    },
+    {
+     "id": "W2",
+     "p0": [
+      -1.1266,
+      0.5244
+     ],
+     "p1": [
+      -0.7212,
+      0.5244
+     ],
+     "length_m": 0.405,
+     "axis": "y",
+     "coord": 0.5244,
+     "observed": true,
+     "coverage": 0.0,
+     "spread_cm": 1.5,
+     "confidence": 0.03
+    },
+    {
+     "id": "W3",
+     "p0": [
+      -0.7212,
+      0.5244
+     ],
+     "p1": [
+      -0.7212,
+      -1.2075
+     ],
+     "length_m": 1.732,
+     "axis": "x",
+     "coord": -0.7212,
+     "observed": true,
+     "coverage": 0.0,
+     "spread_cm": 2.7,
+     "confidence": 0.13
+    },
+    {
+     "id": "W4",
+     "p0": [
+      -0.7212,
+      -1.2075
+     ],
+     "p1": [
+      0.3683,
+      -1.2075
+     ],
+     "length_m": 1.09,
+     "axis": "y",
+     "coord": -1.2075,
+     "observed": false,
+     "coverage": 0.0,
+     "spread_cm": null,
+     "confidence": 0.09
+    },
+    {
+     "id": "W5",
+     "p0": [
+      0.3683,
+      -1.2075
+     ],
+     "p1": [
+      0.3683,
+      0.8666
+     ],
+     "length_m": 2.074,
+     "axis": "x",
+     "coord": 0.3683,
+     "observed": true,
+     "coverage": 0.2,
+     "spread_cm": 1.7,
+     "confidence": 0.11
+    },
+    {
+     "id": "W6",
+     "p0": [
+      0.3683,
+      0.8666
+     ],
+     "p1": [
+      0.7976,
+      0.8666
+     ],
+     "length_m": 0.429,
+     "axis": "y",
+     "coord": 0.8666,
+     "observed": true,
+     "coverage": 1.0,
+     "spread_cm": 1.8,
+     "confidence": 0.03
+    },
+    {
+     "id": "W7",
+     "p0": [
+      0.7976,
+      0.8666
+     ],
+     "p1": [
+      0.7976,
+      2.7951
+     ],
+     "length_m": 1.928,
+     "axis": "x",
+     "coord": 0.7976,
+     "observed": true,
+     "coverage": 0.45,
+     "spread_cm": 7.3,
+     "confidence": 0.38
+    },
+    {
+     "id": "W8",
+     "p0": [
+      0.7976,
+      2.7951
+     ],
+     "p1": [
+      1.6947,
+      2.7951
+     ],
+     "length_m": 0.897,
+     "axis": "y",
+     "coord": 2.7951,
+     "observed": true,
+     "coverage": 1.0,
+     "spread_cm": 1.5,
+     "confidence": 0.02
+    },
+    {
+     "id": "W9",
+     "p0": [
+      1.6947,
+      2.7951
+     ],
+     "p1": [
+      1.6947,
+      4.3508
+     ],
+     "length_m": 1.556,
+     "axis": "x",
+     "coord": 1.6947,
+     "observed": false,
+     "coverage": 0.0,
+     "spread_cm": null,
+     "confidence": 0.06
+    },
+    {
+     "id": "W10",
+     "p0": [
+      1.6947,
+      4.3508
+     ],
+     "p1": [
+      -1.1266,
+      4.3508
+     ],
+     "length_m": 2.821,
+     "axis": "y",
+     "coord": 4.3508,
+     "observed": true,
+     "coverage": 0.7,
+     "spread_cm": 6.5,
+     "confidence": 0.03
+    }
+   ],
+   "area_m2": 10.5,
+   "extent_x_m": 2.821,
+   "extent_y_m": 5.558,
+   "ceiling_h_m": 3.124,
+   "n_wall_candidates": 11,
+   "id": "R1",
+   "name": "R1"
+  }
+ ],
+ "connections": [],
+ "damage": [],
+ "damage_meta": {
+  "skipped": true
+ },
+ "debug": {
+  "yaw_deg": 72.25000000000001,
+  "camera_h_m": 1.63,
+  "n_points": 246493,
+  "runtime_s": 4.7
+ },
+ "T_plan_world": [
+  [
+   0.949005,
+   0.312437,
+   -0.04209,
+   0.0
+  ],
+  [
+   0.303779,
+   -0.870558,
+   0.3871,
+   0.0
+  ],
+  [
+   0.084302,
+   -0.380146,
+   -0.921077,
+   1.380046
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ]
+}

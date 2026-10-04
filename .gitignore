@@ -1,0 +1,13 @@
+data/
+out/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.pytest_cache/
+
+# kept local, not part of the submission
+DECISIONS.md
+explainers/
+SETUP.local.md

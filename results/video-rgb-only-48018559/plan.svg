@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="539" height="1080" font-family="Helvetica,Arial" font-size="13"><rect width="100%" height="100%" fill="white"/>
+<polygon points="110.0,110.0 110.0,537.5 153.3,537.5 153.3,680.4 191.0,680.4 191.0,909.9 278.9,909.9 278.9,680.4 327.3,680.4 327.3,493.0 428.9,493.0 428.9,110.0" fill="#f4f6f8" stroke="none"/>
+<text x="248" y="569" text-anchor="middle" font-weight="bold">R1 · 12.28 m² · h 3.06 m</text>
+<line x1="110.0" y1="110.0" x2="110.0" y2="537.5" stroke="#c62828" stroke-width="6"/>
+<text x="92" y="328" text-anchor="end">3.56 m <tspan fill="#c62828">(0.01)</tspan></text>
+<line x1="110.0" y1="537.5" x2="153.3" y2="537.5" stroke="#c62828" stroke-width="6"/>
+<text x="132" y="560" text-anchor="middle">0.36 m <tspan fill="#c62828">(0.07)</tspan></text>
+<line x1="153.3" y1="537.5" x2="153.3" y2="680.4" stroke="#c62828" stroke-width="6"/>
+<text x="135" y="613" text-anchor="end">1.19 m <tspan fill="#c62828">(0.02)</tspan></text>
+<line x1="153.3" y1="680.4" x2="191.0" y2="680.4" stroke="#c62828" stroke-width="6"/>
+<text x="172" y="702" text-anchor="middle">0.31 m <tspan fill="#c62828">(0.05)</tspan></text>
+<line x1="191.0" y1="680.4" x2="191.0" y2="909.9" stroke="#c62828" stroke-width="6"/>
+<text x="173" y="799" text-anchor="end">1.91 m <tspan fill="#c62828">(0.02)</tspan></text>
+<line x1="191.0" y1="909.9" x2="278.9" y2="909.9" stroke="#c62828" stroke-width="6" stroke-dasharray="8,6"/>
+<text x="235" y="932" text-anchor="middle">0.73 m <tspan fill="#c62828">(0.05)</tspan></text>
+<line x1="278.9" y1="909.9" x2="278.9" y2="680.4" stroke="#c62828" stroke-width="6"/>
+<text x="297" y="799" text-anchor="start">1.91 m <tspan fill="#c62828">(0.02)</tspan></text>
+<line x1="278.9" y1="680.4" x2="327.3" y2="680.4" stroke="#c62828" stroke-width="6"/>
+<text x="303" y="702" text-anchor="middle">0.40 m <tspan fill="#c62828">(0.05)</tspan></text>
+<line x1="327.3" y1="680.4" x2="327.3" y2="493.0" stroke="#c62828" stroke-width="6"/>
+<text x="345" y="591" text-anchor="start">1.56 m <tspan fill="#c62828">(0.02)</tspan></text>
+<line x1="327.3" y1="493.0" x2="428.9" y2="493.0" stroke="#c62828" stroke-width="6"/>
+<text x="378" y="515" text-anchor="middle">0.85 m <tspan fill="#c62828">(0.04)</tspan></text>
+<line x1="428.9" y1="493.0" x2="428.9" y2="110.0" stroke="#c62828" stroke-width="6" stroke-dasharray="8,6"/>
+<text x="447" y="306" text-anchor="start">3.19 m <tspan fill="#c62828">(0.04)</tspan></text>
+<line x1="428.9" y1="110.0" x2="110.0" y2="110.0" stroke="#c62828" stroke-width="6"/>
+<text x="269" y="96" text-anchor="middle">2.66 m <tspan fill="#c62828">(0.08)</tspan></text>
+<text x="110" y="1042">Source: video · scale: MapAnything metric depth (learned)</text>
+<text x="110" y="1062">solid = wall observed · dashed = inferred · (n) = confidence</text>
+</svg>

@@ -1,0 +1,227 @@
+{
+ "original|48018559": {
+  "config": "original",
+  "scene": "48018559",
+  "held_out": false,
+  "rows": [
+   {
+    "laser_m": 2.499,
+    "pred_m": 2.661,
+    "err_cm": 16.2,
+    "confidence": 0.64,
+    "spread_cm": 0
+   }
+  ],
+  "frames": 824,
+  "frame_filter": null,
+  "wall_lines": 11,
+  "walls": 4,
+  "floor": "detected",
+  "median_spread_cm": NaN,
+  "ceiling_m": 2.452,
+  "area_m2": 14.13,
+  "runtime_s": 7.8
+ },
+ "original|48018560": {
+  "config": "original",
+  "scene": "48018560",
+  "held_out": true,
+  "rows": [
+   {
+    "laser_m": 2.487,
+    "pred_m": 2.543,
+    "err_cm": 5.6,
+    "confidence": 0.82,
+    "spread_cm": 0
+   }
+  ],
+  "frames": 956,
+  "frame_filter": null,
+  "wall_lines": 17,
+  "walls": 6,
+  "floor": "detected",
+  "median_spread_cm": NaN,
+  "ceiling_m": 4.212,
+  "area_m2": 8.05,
+  "runtime_s": 8.2
+ },
+ "original|48018562": {
+  "config": "original",
+  "scene": "48018562",
+  "held_out": true,
+  "rows": [
+   {
+    "laser_m": 2.491,
+    "pred_m": null,
+    "err_cm": null,
+    "confidence": null,
+    "spread_cm": null
+   }
+  ],
+  "frames": 578,
+  "frame_filter": null,
+  "wall_lines": 2,
+  "walls": 4,
+  "floor": "detected",
+  "median_spread_cm": NaN,
+  "ceiling_m": null,
+  "area_m2": 17.38,
+  "runtime_s": 5.1
+ },
+ "lidar-nofilter|48018559": {
+  "config": "lidar-nofilter",
+  "scene": "48018559",
+  "held_out": false,
+  "rows": [
+   {
+    "laser_m": 2.499,
+    "pred_m": null,
+    "err_cm": null,
+    "confidence": null,
+    "spread_cm": null
+   }
+  ],
+  "frames": 824,
+  "frame_filter": {},
+  "wall_lines": 7,
+  "walls": 4,
+  "floor": "detected",
+  "median_spread_cm": 7.4,
+  "ceiling_m": null,
+  "area_m2": 9.78,
+  "runtime_s": 7.1
+ },
+ "lidar-nofilter|48018560": {
+  "config": "lidar-nofilter",
+  "scene": "48018560",
+  "held_out": true,
+  "rows": [
+   {
+    "laser_m": 2.487,
+    "pred_m": 2.567,
+    "err_cm": 8.0,
+    "confidence": 0.09,
+    "spread_cm": 6.7
+   }
+  ],
+  "frames": 956,
+  "frame_filter": {},
+  "wall_lines": 7,
+  "walls": 8,
+  "floor": "detected",
+  "median_spread_cm": 7.0,
+  "ceiling_m": null,
+  "area_m2": 6.77,
+  "runtime_s": 7.9
+ },
+ "lidar-nofilter|48018562": {
+  "config": "lidar-nofilter",
+  "scene": "48018562",
+  "held_out": true,
+  "rows": [
+   {
+    "laser_m": 2.491,
+    "pred_m": 2.469,
+    "err_cm": -2.2,
+    "confidence": 0.12,
+    "spread_cm": 4.9
+   }
+  ],
+  "frames": 578,
+  "frame_filter": {},
+  "wall_lines": 5,
+  "walls": 4,
+  "floor": "assumed (not observed)",
+  "median_spread_cm": 4.9,
+  "ceiling_m": null,
+  "area_m2": 7.37,
+  "runtime_s": 4.8
+ },
+ "lidar|48018559": {
+  "config": "lidar",
+  "scene": "48018559",
+  "held_out": false,
+  "rows": [
+   {
+    "laser_m": 2.499,
+    "pred_m": 2.486,
+    "err_cm": -1.3,
+    "confidence": 0.12,
+    "spread_cm": 5.7
+   }
+  ],
+  "frames": 176,
+  "frame_filter": {
+   "frames_in": 824,
+   "dropped_blurry": 172,
+   "dropped_fast": 358,
+   "dropped_duplicate": 118,
+   "frames_kept": 176
+  },
+  "wall_lines": 3,
+  "walls": 4,
+  "floor": "detected",
+  "median_spread_cm": 4.0,
+  "ceiling_m": null,
+  "area_m2": 12.68,
+  "runtime_s": 3.1
+ },
+ "lidar|48018560": {
+  "config": "lidar",
+  "scene": "48018560",
+  "held_out": true,
+  "rows": [
+   {
+    "laser_m": 2.487,
+    "pred_m": 2.45,
+    "err_cm": -3.7,
+    "confidence": 0.37,
+    "spread_cm": 2.7
+   }
+  ],
+  "frames": 178,
+  "frame_filter": {
+   "frames_in": 956,
+   "dropped_blurry": 196,
+   "dropped_fast": 405,
+   "dropped_duplicate": 177,
+   "frames_kept": 178
+  },
+  "wall_lines": 3,
+  "walls": 4,
+  "floor": "detected",
+  "median_spread_cm": 2.05,
+  "ceiling_m": null,
+  "area_m2": 7.35,
+  "runtime_s": 3.6
+ },
+ "lidar|48018562": {
+  "config": "lidar",
+  "scene": "48018562",
+  "held_out": true,
+  "rows": [
+   {
+    "laser_m": 2.491,
+    "pred_m": null,
+    "err_cm": null,
+    "confidence": null,
+    "spread_cm": null
+   }
+  ],
+  "frames": 163,
+  "frame_filter": {
+   "frames_in": 578,
+   "dropped_blurry": 120,
+   "dropped_fast": 155,
+   "dropped_duplicate": 140,
+   "frames_kept": 163
+  },
+  "wall_lines": 3,
+  "walls": 4,
+  "floor": "assumed (not observed)",
+  "median_spread_cm": 1.7999999999999998,
+  "ceiling_m": null,
+  "area_m2": 5.5,
+  "runtime_s": 2.5
+ }
+}

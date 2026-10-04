@@ -1,0 +1,61 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Floor plan report</title><style>
+body{font:15px/1.5 system-ui,sans-serif;max-width:1000px;margin:24px auto;padding:0 16px;color:#1d1f21;background:#fff}
+h1{font-size:26px;margin:0 0 4px} h2{font-size:19px;margin:28px 0 8px;border-bottom:1px solid #ddd;padding-bottom:4px}
+h3{font-size:16px;margin:0 0 4px} .meta{color:#555} table{border-collapse:collapse;width:100%;font-size:14px}
+td,th{text-align:left;padding:6px 8px;border-bottom:1px solid #eee} th{color:#555;font-weight:600}
+.plan svg{max-width:100%;height:auto;border:1px solid #ddd;border-radius:8px}
+.b{padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600} .hi{background:#e6f4e8;color:#2e7d32}
+.mid{background:#fdf1de;color:#a85f00} .lo{background:#fbe9e9;color:#c62828}
+.dmg{display:flex;gap:14px;margin:12px 0;padding:12px;border:1px solid #eee;border-radius:8px}
+.dmg img{width:220px;height:auto;border-radius:6px;object-fit:cover} .hyp{background:#fff7e6;padding:6px 10px;border-radius:6px}
+@media (max-width:600px){.dmg{flex-direction:column}.dmg img{width:100%}} footer{margin-top:32px;color:#555;font-size:13px}
+</style></head><body>
+<h1>Floor plan report</h1>
+<p class="meta">Input: <b>video</b> · 120 frames used · scale: MapAnything metric depth (learned) · gravity: estimated ·
+floor: detected · 1 room(s) split at doorways</p>
+<div class="plan"><svg xmlns="http://www.w3.org/2000/svg" width="539" height="1080" font-family="Helvetica,Arial" font-size="13"><rect width="100%" height="100%" fill="white"/>
+<polygon points="110.0,110.0 110.0,537.5 153.3,537.5 153.3,680.4 191.0,680.4 191.0,909.9 278.9,909.9 278.9,680.4 327.3,680.4 327.3,493.0 428.9,493.0 428.9,110.0" fill="#f4f6f8" stroke="none"/>
+<text x="248" y="569" text-anchor="middle" font-weight="bold">R1 · 12.28 m² · h 3.06 m</text>
+<line x1="110.0" y1="110.0" x2="110.0" y2="537.5" stroke="#c62828" stroke-width="6"/>
+<text x="92" y="328" text-anchor="end">3.56 m <tspan fill="#c62828">(0.01)</tspan></text>
+<line x1="110.0" y1="537.5" x2="153.3" y2="537.5" stroke="#c62828" stroke-width="6"/>
+<text x="132" y="560" text-anchor="middle">0.36 m <tspan fill="#c62828">(0.07)</tspan></text>
+<line x1="153.3" y1="537.5" x2="153.3" y2="680.4" stroke="#c62828" stroke-width="6"/>
+<text x="135" y="613" text-anchor="end">1.19 m <tspan fill="#c62828">(0.02)</tspan></text>
+<line x1="153.3" y1="680.4" x2="191.0" y2="680.4" stroke="#c62828" stroke-width="6"/>
+<text x="172" y="702" text-anchor="middle">0.31 m <tspan fill="#c62828">(0.05)</tspan></text>
+<line x1="191.0" y1="680.4" x2="191.0" y2="909.9" stroke="#c62828" stroke-width="6"/>
+<text x="173" y="799" text-anchor="end">1.91 m <tspan fill="#c62828">(0.02)</tspan></text>
+<line x1="191.0" y1="909.9" x2="278.9" y2="909.9" stroke="#c62828" stroke-width="6" stroke-dasharray="8,6"/>
+<text x="235" y="932" text-anchor="middle">0.73 m <tspan fill="#c62828">(0.05)</tspan></text>
+<line x1="278.9" y1="909.9" x2="278.9" y2="680.4" stroke="#c62828" stroke-width="6"/>
+<text x="297" y="799" text-anchor="start">1.91 m <tspan fill="#c62828">(0.02)</tspan></text>
+<line x1="278.9" y1="680.4" x2="327.3" y2="680.4" stroke="#c62828" stroke-width="6"/>
+<text x="303" y="702" text-anchor="middle">0.40 m <tspan fill="#c62828">(0.05)</tspan></text>
+<line x1="327.3" y1="680.4" x2="327.3" y2="493.0" stroke="#c62828" stroke-width="6"/>
+<text x="345" y="591" text-anchor="start">1.56 m <tspan fill="#c62828">(0.02)</tspan></text>
+<line x1="327.3" y1="493.0" x2="428.9" y2="493.0" stroke="#c62828" stroke-width="6"/>
+<text x="378" y="515" text-anchor="middle">0.85 m <tspan fill="#c62828">(0.04)</tspan></text>
+<line x1="428.9" y1="493.0" x2="428.9" y2="110.0" stroke="#c62828" stroke-width="6" stroke-dasharray="8,6"/>
+<text x="447" y="306" text-anchor="start">3.19 m <tspan fill="#c62828">(0.04)</tspan></text>
+<line x1="428.9" y1="110.0" x2="110.0" y2="110.0" stroke="#c62828" stroke-width="6"/>
+<text x="269" y="96" text-anchor="middle">2.66 m <tspan fill="#c62828">(0.08)</tspan></text>
+<text x="110" y="1042">Source: video · scale: MapAnything metric depth (learned)</text>
+<text x="110" y="1062">solid = wall observed · dashed = inferred · (n) = confidence</text>
+</svg></div>
+<h2>Rooms</h2><table><tr><th>Room</th><th>Area (m²)</th><th>Extent (m)</th><th>Ceiling (m)</th><th>Walls</th></tr><tr><td>R1</td><td>12.28</td><td>2.658 × 6.666</td><td>3.059</td><td>12</td></tr></table>
+<h2>Walls</h2><table><tr><th>Wall</th><th>Length (m)</th><th>Seen?</th><th>Coverage</th><th>Thickness (cm)</th><th>Confidence</th></tr><tr><td>R1 W1</td><td>3.56</td><td>observed</td><td>0.90</td><td>3.7</td><td><span class="b lo">0.01 low</span></td></tr><tr><td>R1 W2</td><td>0.36</td><td>observed</td><td>0.00</td><td>4.3</td><td><span class="b lo">0.07 low</span></td></tr><tr><td>R1 W3</td><td>1.19</td><td>observed</td><td>0.22</td><td>5.5</td><td><span class="b lo">0.02 low</span></td></tr><tr><td>R1 W4</td><td>0.31</td><td>observed</td><td>1.00</td><td>7.4</td><td><span class="b lo">0.05 low</span></td></tr><tr><td>R1 W5</td><td>1.91</td><td>observed</td><td>0.03</td><td>5.3</td><td><span class="b lo">0.02 low</span></td></tr><tr><td>R1 W6</td><td>0.73</td><td><i>inferred</i></td><td>0.00</td><td>—</td><td><span class="b lo">0.05 low</span></td></tr><tr><td>R1 W7</td><td>1.91</td><td>observed</td><td>0.18</td><td>3.2</td><td><span class="b lo">0.02 low</span></td></tr><tr><td>R1 W8</td><td>0.40</td><td>observed</td><td>0.00</td><td>7.4</td><td><span class="b lo">0.05 low</span></td></tr><tr><td>R1 W9</td><td>1.56</td><td>observed</td><td>0.10</td><td>6.0</td><td><span class="b lo">0.02 low</span></td></tr><tr><td>R1 W10</td><td>0.85</td><td>observed</td><td>0.81</td><td>4.9</td><td><span class="b lo">0.04 low</span></td></tr><tr><td>R1 W11</td><td>3.19</td><td><i>inferred</i></td><td>0.00</td><td>—</td><td><span class="b lo">0.04 low</span></td></tr><tr><td>R1 W12</td><td>2.66</td><td>observed</td><td>0.74</td><td>8.8</td><td><span class="b lo">0.08 low</span></td></tr></table>
+<h2>Doors and openings</h2><table><tr><th>Between</th><th>Kind</th><th>Width (m)</th></tr><tr><td colspan="3">One room: no doors between rooms.</td></tr></table>
+<h2>Damage</h2><p>Damage detection was not run for this capture.</p><p class="meta"></p>
+<footer><h2>How this was measured</h2>
+<p>Every input becomes a 3D point cloud: LiDAR depth directly, or for photos and video, depth and camera poses predicted
+by MapAnything. Walls are flat planes found in that cloud; the room outline sits on them. A wall's length is the distance
+between the two walls at its ends.</p>
+<p><b>Confidence</b> = input prior (LiDAR 0.9, video 0.65, photos 0.5) × (0.3 + 0.7 × how much of the two end walls was seen)
+× a penalty for wall thickness above 1 cm (a smeared wall gives an uncertain position). Dashed walls were not seen: their
+position comes from the edge of the floor. Treat a low score as "measure this one by hand".</p>
+<p><b>Damage</b> is found by SAM 3 with text prompts (crack, water stain, mold, peeling paint, hole in wall), placed in 3D with the
+depth, and kept only if it sits on a wall, floor or ceiling. A <b>hypothesis</b> is a rule about what may be hidden;
+it is not a finding.</p></footer>
+</body></html>

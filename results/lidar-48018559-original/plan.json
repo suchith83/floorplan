@@ -1,0 +1,141 @@
+{
+ "schema": "fp.plan/0.1",
+ "source": {
+  "input": "lidar",
+  "scale": "LiDAR depth (metric)",
+  "n_frames": 824,
+  "dataset": "ARKitScenes",
+  "video_id": "48018559"
+ },
+ "rooms": [
+  {
+   "polygon": [
+    [
+     -1.8884,
+     0.8789
+    ],
+    [
+     -1.8884,
+     -1.7822
+    ],
+    [
+     3.4215,
+     -1.7822
+    ],
+    [
+     3.4215,
+     0.8789
+    ]
+   ],
+   "walls": [
+    {
+     "id": "W1",
+     "p0": [
+      -1.8884,
+      0.8789
+     ],
+     "p1": [
+      -1.8884,
+      -1.7822
+     ],
+     "length_m": 2.661,
+     "axis": "x",
+     "coord": -1.8884,
+     "observed": false,
+     "coverage": 0.0,
+     "confidence": 0.64
+    },
+    {
+     "id": "W2",
+     "p0": [
+      -1.8884,
+      -1.7822
+     ],
+     "p1": [
+      3.4215,
+      -1.7822
+     ],
+     "length_m": 5.31,
+     "axis": "y",
+     "coord": -1.7822,
+     "observed": true,
+     "coverage": 0.59,
+     "confidence": 0.27
+    },
+    {
+     "id": "W3",
+     "p0": [
+      3.4215,
+      -1.7822
+     ],
+     "p1": [
+      3.4215,
+      0.8789
+     ],
+     "length_m": 2.661,
+     "axis": "x",
+     "coord": 3.4215,
+     "observed": true,
+     "coverage": 0.98,
+     "confidence": 0.64
+    },
+    {
+     "id": "W4",
+     "p0": [
+      3.4215,
+      0.8789
+     ],
+     "p1": [
+      -1.8884,
+      0.8789
+     ],
+     "length_m": 5.31,
+     "axis": "y",
+     "coord": 0.8789,
+     "observed": true,
+     "coverage": 0.66,
+     "confidence": 0.27
+    }
+   ],
+   "area_m2": 14.13,
+   "extent_x_m": 5.31,
+   "extent_y_m": 2.661,
+   "ceiling_h_m": 2.452,
+   "n_wall_candidates": 11,
+   "name": "Room 1"
+  }
+ ],
+ "connections": [],
+ "damage": [],
+ "debug": {
+  "yaw_deg": 89.75,
+  "n_points": 670832,
+  "runtime_s": 7.8
+ },
+ "T_plan_world": [
+  [
+   0.99999,
+   0.0,
+   0.004363,
+   0.0
+  ],
+  [
+   0.004363,
+   0.0,
+   -0.99999,
+   0.0
+  ],
+  [
+   0.0,
+   1.0,
+   0.0,
+   1.700206
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ]
+}

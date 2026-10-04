@@ -1,0 +1,32 @@
+# Copy to data/home/measurements.yaml and fill in (see CAPTURE_GUIDE.md §4).
+# Metres. Two readings per measurement where you can. Delete what you did not measure.
+phone: iQOO Neo 10            # or Redmi Note 10 Pro Max
+captured_on: 2026-10-03
+
+rooms:
+  kitchen:
+    width: [3.41, 3.42]       # short side, wall to wall at ~1 m height
+    length: [4.10, 4.11]      # long side
+    ceiling: [2.70]           # optional, floor to ceiling
+    bathroom: false           # true for a bathroom (used by a concealed-damage rule)
+  bedroom1:
+    width: []
+    length: []
+    bathroom: false
+
+doors:                        # clear opening width
+  - between: [kitchen, hall]
+    width: [0.81, 0.81]
+
+defects:                      # write these BEFORE looking at any output
+  - room: bedroom1
+    wall: "wall with the window"
+    type: crack               # crack | water stain | mould | peeling paint | hole
+    note: "hairline, above the window, about 30 cm long"
+
+magicplan:                    # optional: Magicplan's numbers for the same rooms
+  kitchen: {width: null, length: null}
+
+plan_rooms:                   # fill AFTER a first run: which plan room (see out/<run>/plan.svg) is which
+  video_1: {R1: kitchen, R2: bedroom1}
+  video_2: {R1: kitchen, R2: bedroom1}

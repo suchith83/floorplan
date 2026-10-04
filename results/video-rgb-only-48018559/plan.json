@@ -1,0 +1,332 @@
+{
+ "schema": "fp.plan/0.3",
+ "source": {
+  "input": "video",
+  "scale": "MapAnything metric depth (learned)",
+  "n_frames": 120,
+  "gravity": "estimated",
+  "floor": "detected",
+  "frame_filter": {},
+  "dataset": "ARKitScenes",
+  "video_id": "48018559",
+  "rgb_only": true,
+  "mapanything_scale": 1.408
+ },
+ "layout": "1 room(s) split at doorways",
+ "rooms": [
+  {
+   "polygon": [
+    [
+     -1.0245,
+     3.964
+    ],
+    [
+     -1.0245,
+     0.4011
+    ],
+    [
+     -0.6637,
+     0.4011
+    ],
+    [
+     -0.6637,
+     -0.7897
+    ],
+    [
+     -0.3498,
+     -0.7897
+    ],
+    [
+     -0.3498,
+     -2.7021
+    ],
+    [
+     0.383,
+     -2.7021
+    ],
+    [
+     0.383,
+     -0.7897
+    ],
+    [
+     0.7862,
+     -0.7897
+    ],
+    [
+     0.7862,
+     0.7721
+    ],
+    [
+     1.6332,
+     0.7721
+    ],
+    [
+     1.6332,
+     3.964
+    ]
+   ],
+   "walls": [
+    {
+     "id": "W1",
+     "p0": [
+      -1.0245,
+      3.964
+     ],
+     "p1": [
+      -1.0245,
+      0.4011
+     ],
+     "length_m": 3.563,
+     "axis": "x",
+     "coord": -1.0245,
+     "observed": true,
+     "coverage": 0.9,
+     "spread_cm": 3.7,
+     "confidence": 0.01
+    },
+    {
+     "id": "W2",
+     "p0": [
+      -1.0245,
+      0.4011
+     ],
+     "p1": [
+      -0.6637,
+      0.4011
+     ],
+     "length_m": 0.361,
+     "axis": "y",
+     "coord": 0.4011,
+     "observed": true,
+     "coverage": 0.0,
+     "spread_cm": 4.3,
+     "confidence": 0.07
+    },
+    {
+     "id": "W3",
+     "p0": [
+      -0.6637,
+      0.4011
+     ],
+     "p1": [
+      -0.6637,
+      -0.7897
+     ],
+     "length_m": 1.191,
+     "axis": "x",
+     "coord": -0.6637,
+     "observed": true,
+     "coverage": 0.22,
+     "spread_cm": 5.5,
+     "confidence": 0.02
+    },
+    {
+     "id": "W4",
+     "p0": [
+      -0.6637,
+      -0.7897
+     ],
+     "p1": [
+      -0.3498,
+      -0.7897
+     ],
+     "length_m": 0.314,
+     "axis": "y",
+     "coord": -0.7897,
+     "observed": true,
+     "coverage": 1.0,
+     "spread_cm": 7.4,
+     "confidence": 0.05
+    },
+    {
+     "id": "W5",
+     "p0": [
+      -0.3498,
+      -0.7897
+     ],
+     "p1": [
+      -0.3498,
+      -2.7021
+     ],
+     "length_m": 1.912,
+     "axis": "x",
+     "coord": -0.3498,
+     "observed": true,
+     "coverage": 0.03,
+     "spread_cm": 5.3,
+     "confidence": 0.02
+    },
+    {
+     "id": "W6",
+     "p0": [
+      -0.3498,
+      -2.7021
+     ],
+     "p1": [
+      0.383,
+      -2.7021
+     ],
+     "length_m": 0.733,
+     "axis": "y",
+     "coord": -2.7021,
+     "observed": false,
+     "coverage": 0.0,
+     "spread_cm": null,
+     "confidence": 0.05
+    },
+    {
+     "id": "W7",
+     "p0": [
+      0.383,
+      -2.7021
+     ],
+     "p1": [
+      0.383,
+      -0.7897
+     ],
+     "length_m": 1.912,
+     "axis": "x",
+     "coord": 0.383,
+     "observed": true,
+     "coverage": 0.18,
+     "spread_cm": 3.2,
+     "confidence": 0.02
+    },
+    {
+     "id": "W8",
+     "p0": [
+      0.383,
+      -0.7897
+     ],
+     "p1": [
+      0.7862,
+      -0.7897
+     ],
+     "length_m": 0.403,
+     "axis": "y",
+     "coord": -0.7897,
+     "observed": true,
+     "coverage": 0.0,
+     "spread_cm": 7.4,
+     "confidence": 0.05
+    },
+    {
+     "id": "W9",
+     "p0": [
+      0.7862,
+      -0.7897
+     ],
+     "p1": [
+      0.7862,
+      0.7721
+     ],
+     "length_m": 1.562,
+     "axis": "x",
+     "coord": 0.7862,
+     "observed": true,
+     "coverage": 0.1,
+     "spread_cm": 6.0,
+     "confidence": 0.02
+    },
+    {
+     "id": "W10",
+     "p0": [
+      0.7862,
+      0.7721
+     ],
+     "p1": [
+      1.6332,
+      0.7721
+     ],
+     "length_m": 0.847,
+     "axis": "y",
+     "coord": 0.7721,
+     "observed": true,
+     "coverage": 0.81,
+     "spread_cm": 4.9,
+     "confidence": 0.04
+    },
+    {
+     "id": "W11",
+     "p0": [
+      1.6332,
+      0.7721
+     ],
+     "p1": [
+      1.6332,
+      3.964
+     ],
+     "length_m": 3.192,
+     "axis": "x",
+     "coord": 1.6332,
+     "observed": false,
+     "coverage": 0.0,
+     "spread_cm": null,
+     "confidence": 0.04
+    },
+    {
+     "id": "W12",
+     "p0": [
+      1.6332,
+      3.964
+     ],
+     "p1": [
+      -1.0245,
+      3.964
+     ],
+     "length_m": 2.658,
+     "axis": "y",
+     "coord": 3.964,
+     "observed": true,
+     "coverage": 0.74,
+     "spread_cm": 8.8,
+     "confidence": 0.08
+    }
+   ],
+   "area_m2": 12.28,
+   "extent_x_m": 2.658,
+   "extent_y_m": 6.666,
+   "ceiling_h_m": 3.059,
+   "n_wall_candidates": 17,
+   "id": "R1",
+   "name": "R1"
+  }
+ ],
+ "connections": [],
+ "damage": [],
+ "damage_meta": {
+  "skipped": true
+ },
+ "debug": {
+  "yaw_deg": 74.75,
+  "camera_h_m": 1.69,
+  "n_points": 709775,
+  "runtime_s": 45.2
+ },
+ "T_plan_world": [
+  [
+   0.962681,
+   0.270602,
+   -0.00436,
+   0.0
+  ],
+  [
+   0.262457,
+   -0.929532,
+   0.259009,
+   0.0
+  ],
+  [
+   0.066036,
+   -0.250488,
+   -0.965865,
+   1.183864
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ]
+}

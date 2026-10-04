@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="518" height="892" font-family="Helvetica,Arial" font-size="13"><rect width="100%" height="100%" fill="white"/>
+<polygon points="110.0,722.0 408.3,722.0 408.3,110.0 110.0,110.0" fill="#f4f6f8" stroke="none"/>
+<text x="259" y="416" text-anchor="middle" font-weight="bold">R1 · 12.68 m²</text>
+<line x1="110.0" y1="722.0" x2="408.3" y2="722.0" stroke="#c62828" stroke-width="6" stroke-dasharray="8,6"/>
+<text x="259" y="744" text-anchor="middle">2.49 m <tspan fill="#c62828">(0.12)</tspan></text>
+<line x1="408.3" y1="722.0" x2="408.3" y2="110.0" stroke="#c62828" stroke-width="6"/>
+<text x="426" y="420" text-anchor="start">5.10 m <tspan fill="#c62828">(0.27)</tspan></text>
+<line x1="408.3" y1="110.0" x2="110.0" y2="110.0" stroke="#c62828" stroke-width="6" stroke-dasharray="8,6"/>
+<text x="259" y="96" text-anchor="middle">2.49 m <tspan fill="#c62828">(0.12)</tspan></text>
+<line x1="110.0" y1="110.0" x2="110.0" y2="722.0" stroke="#c62828" stroke-width="6"/>
+<text x="92" y="420" text-anchor="end">5.10 m <tspan fill="#c62828">(0.27)</tspan></text>
+<text x="110" y="854">Source: lidar · scale: LiDAR depth (metric)</text>
+<text x="110" y="874">solid = wall observed · dashed = inferred · (n) = confidence</text>
+</svg>

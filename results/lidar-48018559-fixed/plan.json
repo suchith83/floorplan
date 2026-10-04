@@ -1,0 +1,160 @@
+{
+ "schema": "fp.plan/0.3",
+ "source": {
+  "input": "lidar",
+  "scale": "LiDAR depth (metric)",
+  "n_frames": 176,
+  "gravity": "sensor",
+  "floor": "detected",
+  "frame_filter": {
+   "frames_in": 824,
+   "dropped_blurry": 172,
+   "dropped_fast": 358,
+   "dropped_duplicate": 118,
+   "frames_kept": 176
+  },
+  "dataset": "ARKitScenes",
+  "video_id": "48018559"
+ },
+ "layout": "1 room(s) split at doorways",
+ "rooms": [
+  {
+   "polygon": [
+    [
+     -0.7487,
+     -1.5261
+    ],
+    [
+     1.7375,
+     -1.5261
+    ],
+    [
+     1.7375,
+     3.5739
+    ],
+    [
+     -0.7487,
+     3.5739
+    ]
+   ],
+   "walls": [
+    {
+     "id": "W1",
+     "p0": [
+      -0.7487,
+      -1.5261
+     ],
+     "p1": [
+      1.7375,
+      -1.5261
+     ],
+     "length_m": 2.486,
+     "axis": "y",
+     "coord": -1.5261,
+     "observed": false,
+     "coverage": 0.0,
+     "spread_cm": null,
+     "confidence": 0.12
+    },
+    {
+     "id": "W2",
+     "p0": [
+      1.7375,
+      -1.5261
+     ],
+     "p1": [
+      1.7375,
+      3.5739
+     ],
+     "length_m": 5.1,
+     "axis": "x",
+     "coord": 1.7375,
+     "observed": true,
+     "coverage": 0.48,
+     "spread_cm": 2.3,
+     "confidence": 0.27
+    },
+    {
+     "id": "W3",
+     "p0": [
+      1.7375,
+      3.5739
+     ],
+     "p1": [
+      -0.7487,
+      3.5739
+     ],
+     "length_m": 2.486,
+     "axis": "y",
+     "coord": 3.5739,
+     "observed": false,
+     "coverage": 0.0,
+     "spread_cm": null,
+     "confidence": 0.12
+    },
+    {
+     "id": "W4",
+     "p0": [
+      -0.7487,
+      3.5739
+     ],
+     "p1": [
+      -0.7487,
+      -1.5261
+     ],
+     "length_m": 5.1,
+     "axis": "x",
+     "coord": -0.7487,
+     "observed": true,
+     "coverage": 0.99,
+     "spread_cm": 5.7,
+     "confidence": 0.27
+    }
+   ],
+   "area_m2": 12.68,
+   "extent_x_m": 2.486,
+   "extent_y_m": 5.1,
+   "ceiling_h_m": null,
+   "n_wall_candidates": 3,
+   "id": "R1",
+   "name": "R1"
+  }
+ ],
+ "connections": [],
+ "damage": [],
+ "damage_meta": {
+  "skipped": true
+ },
+ "debug": {
+  "yaw_deg": 0.25,
+  "camera_h_m": 1.04,
+  "n_points": 268404,
+  "runtime_s": 3.1
+ },
+ "T_plan_world": [
+  [
+   0.004363,
+   0.0,
+   0.99999,
+   0.0
+  ],
+  [
+   0.99999,
+   0.0,
+   -0.004363,
+   0.0
+  ],
+  [
+   0.0,
+   1.0,
+   0.0,
+   1.468271
+  ],
+  [
+   0.0,
+   0.0,
+   0.0,
+   1.0
+  ]
+ ]
+}
