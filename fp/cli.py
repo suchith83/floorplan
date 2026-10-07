@@ -270,6 +270,10 @@ def _fusion_debug(debug, P, N, rec, bundle, T, plan, ceiling_h, lines):
     traj = bundle.meta.get("_trajectory")
     cams = to_plan(T, traj[1] if traj is not None else np.array([f.T_wc[:3, 3] for f in rec.frames]))
     fusion_topdown_png(debug / "fusion_topdown.png", P, rec.colors, cams, plan["rooms"])
+    # wall points (plan x/y, wall band, 2 cm thinned) for registering two scans of one property (scripts/repeatability.py)
+    wb = (np.abs(N[:, 2]) < 0.2) & (P[:, 2] > 0.3) & (P[:, 2] < 2.1)
+    _, keep = np.unique(np.floor(P[wb, :2] / 0.02).astype(np.int64), axis=0, return_index=True)
+    np.save(debug / "wall_points_2d.npy", P[wb, :2][keep].astype(np.float32))
     if not lines:
         return
     # the main room's longest seen wall, matched back to its detected plane
