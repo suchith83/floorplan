@@ -99,14 +99,16 @@ def _pos_half(wall: dict, tier: str) -> float:
     return pos * (1.0 if wall["observed"] else INFERRED_FACTOR)
 
 
-def room_to_schema(room: dict, tier: str) -> dict:
-    """One room from fp.geometry.plan._room (+ id/name) -> schema Room. Openings are added later."""
+def room_to_schema(room: dict, tier: str, extra_rel: float = 0.0) -> dict:
+    """One room from fp.geometry.plan._room (+ id/name) -> schema Room. Openings are added later.
+    extra_rel: added to the tier's relative scale term when the learned scale disagrees with priors."""
     rid, walls = room["id"], room["walls"]
+    rel = SCALE_REL[tier] + extra_rel
     pos = [_pos_half(w, tier) for w in walls]
     out_walls = []
     for k, w in enumerate(walls):
         prev, nxt = walls[k - 1], walls[(k + 1) % len(walls)]
-        half = pos[k - 1] + pos[(k + 1) % len(walls)] + SCALE_REL[tier] * w["length_m"]
+        half = pos[k - 1] + pos[(k + 1) % len(walls)] + rel * w["length_m"]
         both_seen = prev["observed"] and nxt["observed"]
         method = "distance between neighbouring wall planes" + ("" if both_seen else " (a neighbour was inferred)")
         out_walls.append({"id": f"{rid}.{w['id']}", "p0": w["p0"], "p1": w["p1"],
@@ -114,10 +116,10 @@ def room_to_schema(room: dict, tier: str) -> dict:
                           "observed": bool(w["observed"]), "coverage": float(w["coverage"])})
     lengths = np.array([w["length_m"] for w in walls])
     all_seen = all(w["observed"] for w in walls)
-    area_half = float(np.sum(lengths * pos)) + 2 * SCALE_REL[tier] * room["area_m2"]
-    perim_half = 2 * float(np.sum(pos)) + SCALE_REL[tier] * float(lengths.sum())
+    area_half = float(np.sum(lengths * pos)) + 2 * rel * room["area_m2"]
+    perim_half = 2 * float(np.sum(pos)) + rel * float(lengths.sum())
     H = room.get("ceiling_h_m")
-    ceiling = (measure(H, CEILING_HALF * TIER_SCALE[tier] + SCALE_REL[tier] * H, "m",
+    ceiling = (measure(H, CEILING_HALF * TIER_SCALE[tier] + rel * H, "m",
                        "ceiling layer minus floor layer (whole capture)")
                if H is not None else not_observed("m", "no ceiling layer found"))
     return {
@@ -142,7 +144,9 @@ def _nearest_wall(room: dict, c) -> dict:
 def fill_from_geometry(plan: dict, rooms: list[dict], connections: list[dict]) -> None:
     """Rooms and doorway necks from fp.geometry -> plan rooms, openings, connections, footprint."""
     tier = plan["tier"]
-    plan["rooms"] = [room_to_schema(r, tier) for r in rooms]
+    # camera tiers: a learned scale that disagrees with priors widens intervals (fp/recon/camera.scale_check)
+    extra = ((plan["source"].get("recon") or {}).get("scale_check") or {}).get("extra_rel", 0.0)
+    plan["rooms"] = [room_to_schema(r, tier, extra) for r in rooms]
     by_id = {r["id"]: r for r in plan["rooms"]}
     for c in connections:
         a, b = c["rooms"]

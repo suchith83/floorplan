@@ -152,7 +152,54 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   span accuracy matters more than double walls, try a per-room refinement after correction (D13).
   (The old subagent worktree from 03 is removed.)
 ## 04 — Openings (doors, windows, passages) and per-room ceiling height: not started
-## 05 — Video and photo tiers (no depth, no poses): not started
+## 05 — Video and photo tiers (no depth, no poses): **runs end to end; accuracy weak, photo-tier gates not met** (worktree ../floorplan-cam, branch track/camera, merged 7 Oct)
+**Built**
+- **Ingest** (`fp/ingest/photos.py`, `video.py`, `media.py`): HEIC (pillow-heif), EXIF rotation, P3 -> sRGB, EXIF 35 mm focal ->
+  `_K_prior`; room folders required (loose photo -> StageError); identical doorway photo in two folders -> one frame with
+  `_frame_room_sets`; video via bundled ffmpeg (imageio-ffmpeg), HDR tonemap, autorotate, 3 fps, <= 240 keyframes;
+  frame cache keyed by content hash under `<out>/../_cache`. Tests: HEIC, 10-bit HLG HEVC with rotation (`tests/test_camera_ingest.py`).
+- **Recon** `fp/recon/camera.py`: MapAnything locally (cuda > mps > cpu) or `--backend modal`. **Cache per model pass**
+  (key = model + params + frame content ids + K priors; raw outputs only, merge/geometry always rerun). Chunks of
+  `CHUNK = 24` views, `OVERLAP = 6`, merged by **median depth ratio** at shared pixels + average pose move; final scale =
+  **median of the chunks' metric votes** (D05.2). Warning when a merged chunk still disagrees by > 0.25 m. Photos: one
+  joint pass, rooms linked by shared photo / >= 40 inliers, unlinked rooms unplaced + warning. Gravity: **image up**,
+  overruled only by 2x support (D05.4). Scale priors widen intervals (D05.5).
+- `scripts/make_camera_tiers.py`: derived video gets the **display-rotation tag** an iPhone writes; stills get EXIF
+  focal; room photos are **overlapping sweeps** (D05.7, D05.8). `scripts/cache_sync.py` push/pull/list (HF dataset +
+  sha256 manifest; not yet tried against a real repo). `eval/cross_tier.py` (+ test).
+
+**Numbers** (M5, 16 GB, MPS; the 03 jobs ran in parallel for part of the session)
+- MPS per pass (518x392, bf16): 4 views 12.6 s / 6.6 GB; 16 views 18.7 s / 8.75 GB; **24 views 37.1 s / 9.83 GB**; model
+  load 40-50 s. 40 views swaps on 16 GB.
+- **~120 keyframes**: c00a video, 109 keyframes, 6 passes: **338 s live, 10.8 s replayed** (peak footprint 14.3 GB).
+  The first attempt took 1,538 s while 03's c7d2 job held the memory (swap 15 GB): don't run both together.
+- Photos: c00a 7 photos 47 s live; c7d2 17 photos 54 s live (one pass each). **40 photos not timed** (no 40-photo set;
+  expect 2 passes, ~2.5 min).
+- Cache acceptance: live run vs replay, plan.json **byte-identical outside `timings`** (c00a + c7d2 photos, c00a video).
+- vs LiDAR reference (eval/cross_tier.py): c00a video footprint IoU **0.62**, area 30.4 vs 25.6 m², camera 1.25 m above
+  floor (LiDAR 1.42-1.48); chunk scales 0.89-1.15 (were 0.78 -> 0.22 before the merge fix). c00a photos IoU 0.21
+  (5.4 vs 25.6 m²); c7d2 photos IoU 0.17 (12.6 vs 73.3 m², 2 of 4 rooms, adjacency not recovered), ceiling 2.47 m
+  (reference 3.08). No reference area falls inside a camera-tier interval.
+- Photo poses vs LiDAR (c7d2): median relative-rotation error 35 deg (farthest-point photos) -> **10 deg** (sweeps);
+  positions still unregistered across sweeps/rooms (RMS 3.0 m on a 3.1 m spread).
+
+**Not done / known problems**
+- **c7d2 video run** was still running at merge time (240 keyframes, 13 passes); its numbers and
+  `eval/cross_tier_sample.md` are not written yet.
+- Acceptance "photos: one stitched plan, correct adjacency, no overlaps": **not met**. No overlaps (0 m²), but rooms are
+  undersized and adjacency is wrong. Two causes: (1) the footprint rule needs rays from >= 3 frames (`MIN_RAY_HITS`,
+  fp/geometry/plan.py), which 7-17 photos rarely give (c00a: 0.8 m² vs 9.0 m² from >= 1 photo), and room folders are not used
+  to split rooms. Fix deferred to after the merge by the user (D05.9): `MIN_RAY_HITS` by tier + per-room footprint from
+  each folder's photos. (2) Photo positions are not registered across sweeps (see above).
+- c7d2 photos: both plan rooms are named "R2" (`_name_rooms` in fp/cli.py takes the majority folder; no uniqueness).
+- Video: the kitchen stretch of c00a (19-37 s) has inconsistent model poses (per-pass RMS vs LiDAR 0.35-0.63 m); a
+  warning names it. Camera-tier intervals are far too narrow (07 must calibrate them per tier).
+- Verifier subagent not run for 05.
+
+**What the next work orders need to know**
+- 08 (protocol): photos must overlap (sweeps, ~half a view between neighbours, a doorway photo in both folders); video
+  is the stronger camera tier.
+- 07: calibrate camera-tier intervals; `eval/cross_tier.py` gives the per-room errors against the LiDAR reference.
 ## 06 — Damage regions, concealed-damage flags, scope line items: not started
 ## 07 — Calibrated intervals and the benchmark harness: not started
 ## 08 — Capture protocol, device matrix, README, report, compliance matrix: not started

@@ -15,6 +15,11 @@ dependencies = [
   "modal",
   "huggingface_hub",
   "pydantic>=2.12,<3",
+  "torch>=2.14.1",
+  "torchvision>=0.29.1",
+  "mapanything",
+  "pillow-heif>=1.8.0",
+  "imageio-ffmpeg>=0.6.0",
 ]
 
 [project.scripts]
@@ -36,3 +41,6 @@ dev = [
 testpaths = ["tests"]
 # numpy + Apple Accelerate: spurious matmul warnings (see fp/__init__.py)
 filterwarnings = ["ignore:.*encountered in matmul:RuntimeWarning"]
+
+[tool.uv.sources]
+mapanything = { git = "https://github.com/facebookresearch/map-anything", rev = "3d10cf7a3016fc0f9bb13a071ee66c47b10be0d9" }
