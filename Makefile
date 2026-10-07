@@ -6,9 +6,9 @@
 benchmark:
 	uv run python eval/run_benchmark.py --all
 
-# Rebuild the tables from the plans already in out/ (no fp runs).
+# Rebuild the tables from the plans already in out/ (no fp runs, no refit: fp/calibration.json is left as it is).
 benchmark-tables:
-	uv run python eval/run_benchmark.py
+	uv run python eval/run_benchmark.py --no-fit
 
 test:
 	uv run pytest -q

@@ -88,8 +88,8 @@ def tier_calibrated(tier: str) -> bool:
 
 def method(tier: str) -> str:
     cs = load()["constants"][tier]
-    fitted = [f"{ty} ({'k' if FIT_PARAM[tier] == 'k' else 'b'}={c[FIT_PARAM[tier]]:.3g}, n={c.get('n')})"
-              for ty, c in cs.items() if c.get("fitted")]
+    fitted = [f"{ty} ({FIT_PARAM[tier]}={c[FIT_PARAM[tier]]:.3g}, "
+              + (f"as {c['from']})" if c.get("from") else f"n={c.get('n')})") for ty, c in cs.items() if c.get("fitted")]
     if not fitted:
         return "provisional (D5, fp/contract.py): not calibrated on any evidence for this tier"
     rest = [ty for ty, c in cs.items() if not c.get("fitted")]

@@ -272,7 +272,7 @@ footer{margin-top:34px;color:#4a525b;font-size:14px}
 <h2 style="margin-top:0">How to read this</h2>
 <p><b>Intervals.</b> Every number comes with a range written <i>value [lo–hi]</i>, and on the plan as <i>value ±h</i>
 (h is the larger distance from the value to either end of the range). It is a {_e(lvl.replace(" intervals", "") or "90%")}
-interval: we state that about 9 in 10 true values fall inside [lo, hi]. {"These ranges are calibrated against reference measurements." if iv.get("calibrated") else "These ranges are provisional: they are not yet calibrated against reference measurements."}</p>
+interval: we state that about 9 in 10 true values fall inside [lo, hi]. {"These ranges are calibrated on the evidence named in the interval method above (for the sample data: a repeat scan and the LiDAR plan, not tape); types it lists as provisional are not." if iv.get("calibrated") else "These ranges are provisional: they are not yet calibrated against reference measurements."}</p>
 <p><b>Not observed</b> means the capture did not see it, so we give no number rather than a guess.
 <b>Inferred / assumed</b> means a number we did not measure directly (for example a wall that was never seen, whose
 position comes from the edge of the floor); on the plan those walls are dashed.</p>

@@ -155,15 +155,22 @@ def lidar_repeat_rows(A, B, rep) -> tuple[list, list]:
                     continue
                 # the whole disagreement is charged to each scan (conservative: no /sqrt(2))
                 fit.append({"tier": "lidar", "type": "wall_length", "value": sa, "err": sb - sa, "a": 0.5 * (aA + aB),
-                            "fold": None, "what": f"span {m['a']}/{m['b']} {wa1['id']}-{wa2['id']}"})
+                            "fold": None, "room": m["a"], "what": f"span {m['a']}/{m['b']} {wa1['id']}-{wa2['id']}"})
         fa, fb = ra[m["a"]]["floor_area"], rb[m["b"]]["floor_area"]
         fit.append({"tier": "lidar", "type": "floor_area", "value": fa["value"], "err": fb["value"] - fa["value"],
-                    "a": 0.5 * (evidence_a(A, "floor_area", fa) + evidence_a(B, "floor_area", fb)), "fold": None,
+                    "a": 0.5 * (evidence_a(A, "floor_area", fa) + evidence_a(B, "floor_area", fb)), "fold": None, "room": m["a"],
                     "what": f"area {m['a']}/{m['b']}"})
-    # two folds by interleaving (rows sorted by room): spans cluster in a few rooms, so a split by room is lopsided
-    for typ in ("wall_length", "floor_area"):
-        for i, r in enumerate(x for x in fit if x["type"] == typ):
-            r["fold"] = f"half {'A' if i % 2 == 0 else 'B'}"
+    # two folds by room (a wall plane must never be in both folds, or held-out spans share errors with fitted ones),
+    # balanced greedily: the room with most span rows first, each into the fold that has fewer so far
+    per_room = {}
+    for r in fit:
+        per_room.setdefault(r["room"], []).append(r)
+    sizes = {"rooms A": 0, "rooms B": 0}
+    for room, rs in sorted(per_room.items(), key=lambda kv: -sum(x["type"] == "wall_length" for x in kv[1])):
+        f = min(sizes, key=sizes.get)
+        sizes[f] += sum(x["type"] == "wall_length" for x in rs) or 1
+        for x in rs:
+            x["fold"] = f
     WA = {w["id"]: w for r in A["rooms"] for w in r["walls"]}
     WB = {w["id"]: w for r in B["rooms"] for w in r["walls"]}
     for w in rep["walls"]:
@@ -291,11 +298,23 @@ def _union_area(polys):
     return unary_union(polys).area if polys else 0.0
 
 
-def photo_stitch(test, selection) -> dict:
-    """Photo tier vs the reference rooms its folders were taken in (data/derived/<id>/selection.json)."""
+def _to_plan(poly_xy, T_from, T_to):
+    """2-D floor polygon in one plan frame -> another, through world coordinates (both 4x4 plan<-world)."""
+    P = np.c_[np.asarray(poly_xy, float), np.zeros(len(poly_xy)), np.ones(len(poly_xy))]
+    return (np.asarray(T_to) @ np.linalg.inv(np.asarray(T_from)) @ P.T).T[:, :2]
+
+
+def photo_stitch(test, selection, lidar) -> dict:
+    """Photo tier vs the rooms its folders were taken in (data/derived/<id>/selection.json). Those polygons come from an
+    older LiDAR plan, so they are moved into the CURRENT LiDAR plan's frame and clipped to its footprint: the reference
+    area is the current LiDAR floor inside the photographed rooms."""
+    from shapely.ops import unary_union
     folders = sorted({p.name for p in (ROOT / "data" / "derived" / selection["capture"] / "photos").iterdir() if p.is_dir()})
     ref_rooms = {r["id"]: r for r in selection["rooms"] if r["id"] in folders}
-    ref_area = sum(r["floor_area_m2"] for r in ref_rooms.values())
+    U = unary_union([Polygon(r["polygon"]).buffer(0) for r in lidar["rooms"]])
+    moved = [Polygon(_to_plan(r["polygon"], selection["T_plan_world"], lidar["frame"]["T_plan_world"])).buffer(0)
+             for r in ref_rooms.values()]
+    ref_area = unary_union(moved).intersection(U).area
     ref_adj = {tuple(sorted(c["rooms"])) for c in selection["connections"] if all(x in ref_rooms for x in c["rooms"])}
     name = {r["id"]: r["name"] for r in test["rooms"]}
     test_adj = {tuple(sorted((name[a], name[b]))) for a, b in (c["rooms"] for c in test["connections"]) if name[a] != name[b]}
@@ -373,7 +392,7 @@ def score(plans, cmps, rep, stress_cov, cal_info) -> list:
                           ratio=abs(fa["rel_err"]) / 0.03))
     for name in ("c00a170fe1-photos", "c7d28f72c6-photos"):
         sel = json.loads((ROOT / "data" / "derived" / name.split("-")[0] / "selection.json").read_text())
-        st = photo_stitch(plans[name], sel)
+        st = photo_stitch(plans[name], sel, plans[name.split("-")[0]])
         multi = len(st["folders"]) > 1
         okfp = st["rel_err"] is not None and abs(st["rel_err"]) <= FOOTPRINT_REL and st["ref_in_interval"]
         status = "PASS" if (okfp and st["overlap_m2"] < 0.01 and (st["adjacency_correct"] or not multi)) else "FAIL"
@@ -398,12 +417,12 @@ def score(plans, cmps, rep, stress_cov, cal_info) -> list:
             covw = sum(r["coverage"] * r["n_test"] for r in held) / n
             G.append(gate("Calibration: held-out coverage of stated 90 % (wall lengths)", tier,
                           "2-fold: " + ", ".join(sorted({r["test_on"] for r in held})), f"{100 * covw:.0f} % of {n}",
-                          "≥ 90 % (within sampling error)", "PASS" if covw >= 0.8 else "FAIL",
+                          "≥ 90 %", "PASS" if covw >= 0.9 else "FAIL",
                           "repeat" if tier == "lidar" else "LiDAR reference",
-                          "PASS band: ≥ 80 % (n is small: 1 in 10 misses is within noise)", ratio=0.9 / max(covw, 1e-3)))
+                          f"n is small (one miss moves it {100 / n:.0f} points); held-out = fit on the other fold", ratio=0.9 / max(covw, 1e-3)))
     G.append(gate("Calibration: LiDAR per-wall edges between the repeat scans (stress set, not fitted)", "lidar",
                   " vs ".join(REPEAT_PAIR), f"{100 * stress_cov['frac']:.0f} % of {stress_cov['n']}", "≥ 90 %",
-                  "PASS" if stress_cov["frac"] >= 0.8 else "FAIL", "repeat",
+                  "PASS" if stress_cov["frac"] >= 0.9 else "FAIL", "repeat",
                   "edges also move when the scans split rooms at different doorways; intervals model plane error, not room splits",
                   ratio=0.9 / max(stress_cov["frac"], 1e-3)))
     G.append(gate("Head-to-head vs consumer app (LiDAR tier)", "lidar", "—", "—", "beat or tie ≥ 70 %", "NOT DONE", "tape",
@@ -512,7 +531,12 @@ def cal_md(C) -> str:
           "charged to the camera tier (conservative).",
           f"- **Rules**: split conformal (the ⌈(n+1)·0.9⌉-th smallest needed factor); n < 9 → the largest (flagged); "
           f"n < {MIN_FIT_N} → stays provisional; a fitted constant is never below its provisional value (no tape, so no narrowing). "
-          "LiDAR fits k (metric scale, b = 0); camera tiers fit b with k = 1.", "",
+          "LiDAR fits k (metric scale, b = 0); camera tiers fit b with k = 1.",
+          "- **Known optimism**: LiDAR spans only include wall planes the two scans matched within 10 cm, so a larger "
+          "disagreement never enters the fit; camera-tier constants are fitted on the same two captures the gates score, "
+          "so any in-sample coverage (e.g. BENCHMARK's 'ref inside interval') is 100 % by construction: read the held-out columns.",
+          "- **Incoherence from small n**: video floor-area b (from 3 rooms) is below video wall b (from 9 walls), "
+          "although an area error should be at least the length error; refit with tape.", "",
           "## Fitted constants", "", "| tier | type | k | b | n | how |", "|---|---|---|---|---|---|"]
     for t in ("lidar", "video", "photos"):
         for ty in cal.TYPES:
