@@ -7,8 +7,9 @@ rule that fired (id + text) and its evidence. Rules read schema damage items (fp
   C2  water stain / mould / peeling paint on a wall below 0.5 m -> rising damp or a leaking pipe in the wall
   C3  water stain or mould on a wall shared with a wet room      -> plumbing leak from that room
   C4  crack within 0.6 m of a door                               -> structural movement around the frame
-  C5  water stain or mould on a ceiling or the top 0.3 m of a wall, in or next to a wet room
-                                                                 -> leak from wet-room pipes in the ceiling void"""
+  C5  water stain or mould on a ceiling or the top 0.3 m of a wall, in or next to a wet room (sharing a wall)
+                                                                 -> leak from wet-room pipes in the ceiling void
+      (a wall stain in a room whose ceiling was not observed can't be called "high", so C5 can't fire there)"""
 from __future__ import annotations
 
 import numpy as np
@@ -57,6 +58,10 @@ def shared_wall_rooms(plan: dict, wall_id: str) -> list[str]:
     return out
 
 
+def _room(plan, rid):
+    return next(r for r in plan["rooms"] if r["id"] == rid)
+
+
 def _doors(plan):
     return [o for r in plan["rooms"] for o in r["openings"] if o["kind"] == "door"]
 
@@ -88,7 +93,10 @@ def concealed(items: list[dict], plan: dict, wet_rooms: set[str] = frozenset()) 
         H = ceil.get(room)
         high = kind == "ceiling" or (kind == "wall" and H is not None and z > H - CEILING_BAND)
         if cls in WET and high:
-            wet_near = [r for r in [room] + behind if r in wet_rooms]
+            # a ceiling's neighbours: every room sharing one of its walls (wet-room pipes run over the partition)
+            near = behind if kind == "wall" else sorted({x for w in _room(plan, room)["walls"]
+                                                         for x in shared_wall_rooms(plan, w["id"])})
+            wet_near = [r for r in [room] + near if r in wet_rooms]
             if wet_near:
                 hits.append(("C5", f"{cls} high on {sid}, in or next to wet room(s) {', '.join(wet_near)}"))
         for rule, ev in hits:

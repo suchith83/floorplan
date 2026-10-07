@@ -75,6 +75,15 @@ def _evidence(out: Path, rel) -> str:
     return '<div class="ev missing">evidence image missing</div>'
 
 
+def _extent(m) -> str:
+    """Damage extents are often a few hundredths of a m2: show cm2 below 0.1 m2 so they don't read 0.00."""
+    if not isinstance(m, dict) or m.get("value") is None:
+        return measure(m)
+    if m["value"] >= 0.1:
+        return measure(m)
+    return f"{m['value'] * 1e4:.0f} cm² [{m['lo'] * 1e4:.0f}–{m['hi'] * 1e4:.0f}]"
+
+
 def _hyp(c: dict) -> str:
     return (f'<div class="hyp"><b>Hypothesis (rule {_e(c.get("rule_id"))})</b>: {_e(c.get("rule_text"))}'
             f'<br><small>Evidence: {_e(c.get("evidence"))}</small></div>')
@@ -166,7 +175,7 @@ def render_report(plan: dict, out: Path) -> str:
             f'<div class="dmg">{_evidence(out, d.get("evidence_image"))}<div class="dtxt">'
             f'<h3>{_e(d.get("id"))} · {_e(str(d.get("class", "")).replace("_", " "))}</h3>'
             f'<p>On <b>{_e(d.get("surface_id"))}</b>, {_e(pos_s)}.<br>'
-            f'Extent {measure(d.get("extent_m2"))} · detector score {score_s}</p>{hyps}</div></div>')
+            f'Extent {_extent(d.get("extent_m2"))} · detector score {score_s}</p>{hyps}</div></div>')
     damage = "".join(dmg_items) or '<p class="muted">No damage reported.</p>'
     loose = [c for c in concealed if c.get("damage_id") is None]
     loose_html = ("<h3>Hypotheses not tied to a damage item</h3>" + "".join(_hyp(c) for c in loose)) if loose else ""

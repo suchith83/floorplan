@@ -17,6 +17,8 @@ from __future__ import annotations
 
 ASSUMED_H = (2.4, 2.1, 3.2)   # m (value, lo, hi): wall height when the room's ceiling was not observed
 DOOR_H = (2.05, 1.9, 2.4)     # m: door height when its lintel was not observed (work order 04 door range)
+WINDOW_H = (1.2, 0.6, 1.8)    # m: window height when its head was not observed
+PARTITION = 0.40              # m: an opening this close to a parallel wall goes through it too (work order 04)
 WET = ("water_stain", "mold")
 
 
@@ -33,17 +35,43 @@ def _q(v, lo, hi, unit, method, observed=True) -> dict:
             "observed": observed}
 
 
+def openings_in(plan: dict, wall: dict) -> list[dict]:
+    """Openings through this wall: its own, plus those listed on the other face of the same partition (a parallel
+    wall of another room within PARTITION whose opening centre lies on this wall's stretch)."""
+    import numpy as np
+    p0, p1 = np.array(wall["p0"], float), np.array(wall["p1"], float)
+    L = float(np.linalg.norm(p1 - p0))
+    u = (p1 - p0) / L
+    n = np.array([u[1], -u[0]])
+    walls = {w["id"]: w for r in plan["rooms"] for w in r["walls"]}
+    out = []
+    for o in (o for r in plan["rooms"] for o in r["openings"]):
+        if o["wall_id"] == wall["id"]:
+            out.append(o)
+            continue
+        ow = walls.get(o["wall_id"])
+        if ow is None:
+            continue
+        d = np.subtract(ow["p1"], ow["p0"])
+        if abs(float(np.dot(d / max(np.linalg.norm(d), 1e-9), u))) < 0.99:
+            continue
+        c = np.array(o["center"], float) - p0
+        if abs(float(c @ n)) < PARTITION and 0.0 < float(c @ u) < L:
+            out.append(o)
+    return out
+
+
 def wall_area(plan: dict, room: dict, wall: dict) -> dict:
     """Wall area net of the openings in it (m2), with an interval."""
     L = _iv(wall["length"])
     H = _iv(room["ceiling_height"], ASSUMED_H)
     observed = room["ceiling_height"]["value"] is not None and wall["length"]["observed"]
     v, lo, hi = L[0] * H[0], L[1] * H[1], L[2] * H[2]
-    for o in (o for r in plan["rooms"] for o in r["openings"] if o["wall_id"] == wall["id"]):
+    for o in openings_in(plan, wall):
         w = _iv(o["width"])
-        h = _iv(o["height"], H if o["kind"] == "passage" else DOOR_H if o["kind"] == "door" else (1.2, 0.6, 1.8))
-        if o["kind"] == "window" and o["height"] is None:
-            observed = False
+        h = _iv(o["height"], H if o["kind"] == "passage" else DOOR_H if o["kind"] == "door" else WINDOW_H)
+        if o["kind"] != "passage" and _iv(o["height"]) is None:
+            observed = False                    # an assumed opening height: the net area is not measured
         v, lo, hi = v - w[0] * h[0], lo - w[2] * h[2], hi - w[1] * h[1]
     method = ("wall length x ceiling height - openings" if room["ceiling_height"]["value"] is not None
               else f"wall length x assumed height {ASSUMED_H[0]} m [{ASSUMED_H[1]}, {ASSUMED_H[2]}] (ceiling not "
@@ -84,7 +112,10 @@ def build(plan: dict) -> list[dict]:
         n = sum(c in ("crack", "hole") for c in classes)
         if n:
             add(sid, "patch and fill cracks / holes", _q(n, n, n, "count", "count of crack and hole items"))
+        replace_floor = sid.endswith(".floor") and any(c in WET for c in classes)
         for cls, action in (("mold", "mould treatment"), ("water_stain", "stain-block primer")):
+            if replace_floor and cls == "water_stain":
+                continue                        # the floor finish is replaced, so no primer on it
             ex = [d["extent_m2"] for d in ds if d["class"] == cls]
             if ex:
                 add(sid, action, _q(sum(e["value"] for e in ex), sum(e["lo"] for e in ex), sum(e["hi"] for e in ex),
@@ -92,7 +123,7 @@ def build(plan: dict) -> list[dict]:
         if sid.endswith(".ceiling"):
             a = _iv(room["floor_area"])
             add(sid, "repaint ceiling", _q(*a, "m2", "room floor area", room["floor_area"]["observed"]))
-        if sid.endswith(".floor") and any(c in WET for c in classes):
+        if replace_floor:
             a = _iv(room["floor_area"])
             add(sid, "replace floor finish", _q(*a, "m2", "room floor area", room["floor_area"]["observed"]))
             add(sid, "replace skirting", skirting(plan, room))

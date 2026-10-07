@@ -201,7 +201,7 @@ def assess(bundle, plan: dict, out: Path, cache_dir: Path | None = None, backend
     raw, unconfirmed = _confirm(raw, bundle, idx, T, plan, walls, video, cache_dir, use_cache, backend, counts)
     items = _merge(raw, plan["tier"])
     (out / "damage").mkdir(parents=True, exist_ok=True)
-    for old in (out / "damage").glob("D*.jpg"):
+    for old in list((out / "damage").glob("D*.jpg")) + list((out / "damage").glob("unconfirmed_*.jpg")):
         old.unlink()
     for it in items:
         r = it["_best"]

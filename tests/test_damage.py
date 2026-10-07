@@ -129,7 +129,7 @@ def test_rules_fire_with_their_ids_and_are_hypotheses():
                              ("water_stain", "R1.W2", (4.0, 0.5, 2.35), 0.03)])     # high, wall shared with R2
     flags = concealed(plan["damage"], plan, wet_rooms={"R2"})
     got = {(f["damage_id"], f["rule_id"]) for f in flags}
-    assert got == {("D1", "C2"), ("D2", "C4"), ("D3", "C1"), ("D4", "C3"), ("D4", "C5")}
+    assert got == {("D1", "C2"), ("D2", "C4"), ("D3", "C1"), ("D3", "C5"), ("D4", "C3"), ("D4", "C5")}
     assert all(f["label"] == "hypothesis" and f["rule_text"] for f in flags)
     assert not {f["rule_id"] for f in concealed(plan["damage"], plan)} & {"C3", "C5"}   # no wet room known
 
@@ -149,3 +149,19 @@ def test_scope_items_reference_real_surfaces_and_carry_intervals():
     assert by[("R1.ceiling", "repaint ceiling")]["value"] == 12.0
     sk = by[("R2.floor", "replace skirting")]
     assert abs(sk["value"] - (2 * (1.9 + 3.0) - 0.9)) < 1e-6      # perimeter - the door into R1
+
+
+def test_a_door_is_taken_off_both_faces_of_its_partition_and_an_assumed_height_is_not_observed():
+    plan = _damage(_plan(), [("crack", "R2.W4", (4.1, 1.0, 1.0), 0.01), ("crack", "R1.W2", (4.0, 2.5, 1.0), 0.01)])
+    by = {s["surface_id"]: s["quantity"] for s in build(plan) if s["action"].startswith("repaint wall")}
+    assert abs(by["R2.W4"]["value"] - (3.0 * 2.5 - 0.9 * 2.05)) < 1e-6       # R1's door is in R2's face too
+    assert by["R2.W4"]["value"] == by["R1.W2"]["value"]
+    plan["rooms"][0]["openings"][0]["height"] = contract.not_observed("m", "lintel not seen")
+    by = {s["surface_id"]: s["quantity"] for s in build(plan) if s["action"].startswith("repaint wall")}
+    assert by["R1.W2"]["observed"] is False                                   # door height assumed, not measured
+
+
+def test_c5_fires_on_a_ceiling_stain_next_to_a_wet_room():
+    plan = _damage(_plan(), [("water_stain", "R1.ceiling", (3.5, 1.5, 2.5), 0.05)])
+    rules = {f["rule_id"] for f in concealed(plan["damage"], plan, wet_rooms={"R2"})}
+    assert rules == {"C1", "C5"}
