@@ -74,3 +74,12 @@ def test_spread_mostly_ignores_a_cabinet_front_near_the_wall():
     assert spread(pts, 0.0) < 0.026                          # robust: close to the wall's own 2 cm
     assert np.std(pts[np.abs(pts) < 0.15]) > 0.04            # a plain std would double it
 
+
+
+def test_a_stray_folder_is_not_mistaken_for_a_photo_folder(tmp_path):
+    from fp.ingest import load_capture
+    (tmp_path / "depth").mkdir()
+    cv2.imwrite(str(tmp_path / "depth" / "000000.png"), np.zeros((192, 256), np.uint16))
+    (tmp_path / "odometry.csv").write_text("timestamp, frame, x, y, z, qx, qy, qz, qw\n")
+    with pytest.raises(SystemExit, match="Stray Scanner"):
+        load_capture(tmp_path)
