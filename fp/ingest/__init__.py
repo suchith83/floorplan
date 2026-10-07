@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fp.bundle import CaptureBundle
-from fp.contract import StageError, StageNotBuilt
+from fp.contract import StageError
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".3gp", ".mkv", ".webm"}
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
@@ -31,9 +31,11 @@ def detect_tier(path: Path) -> str:
                      "or a folder of room folders of photos (.jpg/.heic).")
 
 
-def load_capture(path: Path, *, tier: str | None = None, max_frames: int | None = None) -> CaptureBundle:
+def load_capture(path: Path, *, tier: str | None = None, max_frames: int | None = None,
+                 cache_dir: Path | None = None) -> CaptureBundle:
     """Capture -> bundle for the requested tier (default: the detected one). A LiDAR capture can also run
-    as video or photos (its RGB alone), to compare tiers on the same rooms."""
+    as video or photos (its RGB alone), to compare tiers on the same rooms. Camera-tier frames are cached
+    under cache_dir (default out/_cache), keyed by content."""
     from fp.ingest import arkitscenes, photos, video
     path = Path(path)
     detected = detect_tier(path)
@@ -41,9 +43,9 @@ def load_capture(path: Path, *, tier: str | None = None, max_frames: int | None 
     if detected == "lidar":
         if is_stray(path):
             if tier == "video":   # the capture's own RGB video, without its depth or poses
-                return video.load(path / "rgb.mp4", max_frames=max_frames or video.MAX_KEYFRAMES)
-            if tier == "photos":
-                raise StageNotBuilt("ingest", "Stills from a Stray capture as photo input arrive in work order 05.")
+                return video.load(path / "rgb.mp4", max_frames=max_frames or video.MAX_KEYFRAMES, cache_dir=cache_dir)
+            if tier == "photos":  # evenly spaced sharp stills of the same video, in one unnamed room
+                return photos.from_video(path / "rgb.mp4", max_frames or photos.PHOTOS_FROM_VIDEO, cache_dir=cache_dir)
             from fp.ingest import stray
             bundle = stray.load(path)
             if not bundle.frames:
@@ -55,11 +57,9 @@ def load_capture(path: Path, *, tier: str | None = None, max_frames: int | None 
     if tier != detected:
         raise SystemExit(f"--tier {tier} needs a LiDAR capture; {path} is a {detected} capture.")
     if detected == "video":
-        bundle = video.load(path, max_frames=max_frames or video.MAX_KEYFRAMES)
+        bundle = video.load(path, max_frames=max_frames or video.MAX_KEYFRAMES, cache_dir=cache_dir)
     else:
-        if not any(p.suffix.lower() in {".jpg", ".jpeg", ".png"} for p in path.rglob("*")):
-            raise StageNotBuilt("ingest", "HEIC photos are not decoded yet (work order 05); export as JPEG.")
-        bundle = photos.load(path, max_frames=max_frames or photos.MAX_PHOTOS)
+        bundle = photos.load(path, max_frames=max_frames or photos.MAX_PHOTOS, cache_dir=cache_dir)
     if not bundle.frames:
         raise StageError("ingest", f"No usable frames in {path} (all blurry, duplicate or unreadable).")
     return bundle
