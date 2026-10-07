@@ -150,7 +150,18 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
             rooms, conns = [extract_room(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays=rays,
                                          cams=cams)], []
             rooms[0]["id"] = rooms[0]["name"] = "R1"
+        for d in gdbg.get("dropped", []):
+            warn("rooms", f"Left out a {d['area_m2']:.1f} m2 region the camera never entered, with only "
+                          f"{100 * d['floor_frac']:.0f} % of its floor seen: air seen through a window or doorway.")
         rooms, conns = rank_rooms(rooms, conns, bundle, T, plan, warn)
+        final = {r.get("label", r["id"]): r["id"] for r in rooms}
+        for o in gdbg.get("overlaps", []):
+            a, b = (final.get(k, k) for k in o["rooms"])
+            warn("rooms", f"Rooms {a} and {b} overlapped by {o['overlap_m2']:.2f} m2 "
+                          f"({100 * o['frac_of_smaller']:.0f} % of the smaller); repaired: the overlap went to "
+                          f"{a}, whose own footprint covers more of it.")
+        for a, b, f in check_overlaps(rooms):
+            warn("rooms", f"{a} and {b} still overlap by {100 * f:.1f} % of the smaller room.")
         _name_rooms(rooms, bundle, T)
     contract.fill_from_geometry(plan, rooms, conns)
     plan["frame"]["T_plan_world"] = T.round(6).tolist()
@@ -185,42 +196,70 @@ def room_occupancy(rooms, t: np.ndarray, cams: np.ndarray) -> dict[str, float]:
             for k, p in inner.items()}
 
 
+CONNECTOR_MAX_W = 1.6   # m: a region whose widest inscribed circle is narrower than this is a corridor-width space
+CONNECTOR_MIN_LEN = 2.5  # m: ...and its mean length (area / width) at least this: a hall runs past two doors
+                         # (2 x ~1.2 m); shorter narrow spaces are lobbies or closets
+
+
 def rank_rooms(rooms, conns, bundle, T, plan, warn):
-    """Number rooms by the time the camera spent in them (R1 = the room it spent most time in), and warn about
-    rooms it never really entered: they were seen through a doorway, so their walls and area are partial.
+    """Number rooms by floor area (R1 = largest), name long narrow ones "connector", and warn about rooms the
+    camera never really entered: they were seen through a doorway, so their walls and area are partial.
     Those rooms stay in the plan (we don't hide what was seen), flagged in the warnings."""
     from fp.geometry.align import to_plan
     traj = bundle.meta.get("_trajectory")
-    if traj is None or not rooms:
+    if not rooms:
         return rooms, conns
-    t, pos = traj
-    occ = room_occupancy(rooms, t, to_plan(T, pos))
-    order = sorted(rooms, key=lambda r: -occ[r["id"]])
+    occ = room_occupancy(rooms, traj[0], to_plan(T, traj[1])) if traj is not None else {}
+    order = sorted(rooms, key=lambda r: -r["area_m2"])
     new = {r["id"]: f"R{k + 1}" for k, r in enumerate(order)}
     for r in order:
-        r["occupancy_s"] = round(occ[r["id"]], 1)
-        r["id"] = new[r["id"]]
-        if r["name"] in new:
+        r["occupancy_s"] = round(occ.get(r["id"], 0.0), 1)
+        r["label"], r["id"] = r["id"], new[r["id"]]
+        w = r.get("width_m")
+        if len(order) > 1 and w and w <= CONNECTOR_MAX_W and r["area_m2"] / w >= CONNECTOR_MIN_LEN:
+            r["name"] = "connector"
+        elif r["name"] in new:
             r["name"] = r["id"]
     for c in conns:
         c["rooms"] = sorted((new[c["rooms"][0]], new[c["rooms"][1]]), key=lambda i: int(i[1:]))
+    if traj is None:
+        return order, conns
     plan["source"]["room_occupancy_s"] = {r["id"]: r["occupancy_s"] for r in order}
-    for r in order[1:]:   # R1 is the main room by definition, even on a capture too short to call it visited
-        if r["occupancy_s"] < MIN_ROOM_VISIT_S:
+    main = max(order, key=lambda r: r["occupancy_s"])
+    for r in order:   # the room the camera spent most time in is the main room, even on a very short capture
+        if r is not main and r["occupancy_s"] < MIN_ROOM_VISIT_S:
             warn("rooms", f"{r['id']} is partially observed: the camera spent {r['occupancy_s']:.1f} s inside it "
                           f"(< {MIN_ROOM_VISIT_S:.0f} s), so it was seen mostly through a doorway; its walls and "
                           f"area are partial.")
     return order, conns
 
 
+def check_overlaps(rooms) -> list[tuple[str, str, float]]:
+    """Pairs of room polygons overlapping by more than 1 % of the smaller one (should be none after repair)."""
+    from shapely.geometry import Polygon
+    from fp.geometry.plan import OVERLAP_TOL
+    out = []
+    for a in range(len(rooms)):
+        for b in range(a + 1, len(rooms)):
+            A, B = Polygon(rooms[a]["polygon"]), Polygon(rooms[b]["polygon"])
+            f = A.intersection(B).area / max(min(A.area, B.area), 1e-9)
+            if f > OVERLAP_TOL:
+                out.append((rooms[a]["id"], rooms[b]["id"], round(f, 3)))
+    return out
+
+
 def _labels_png(path, gdbg):
-    """debug/rooms_split.png: the footprint (grey) split into rooms (one colour each), +x right, +y up."""
+    """debug/rooms_split.png: the footprint (grey) split into rooms (one colour each), tall walls black, closed
+    doorways red; +x right, +y up."""
     import cv2
     lab = gdbg["labels"]
     pal = np.array([[255, 255, 255]] + [[int(v) for v in np.random.default_rng(k).integers(60, 230, 3)]
                                          for k in range(1, lab.max() + 1)], np.uint8)
     img = pal[lab]
     img[(lab == 0) & gdbg["footprint"]] = 160
+    if "tall" in gdbg:
+        img[gdbg["tall"]] = 0                 # tall wall evidence (black)
+        img[gdbg["bar"]] = (0, 0, 255)        # doorways closed along wall lines (red)
     cv2.imwrite(str(path), np.ascontiguousarray(img.transpose(1, 0, 2)[::-1]))
 
 

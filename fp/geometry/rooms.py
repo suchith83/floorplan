@@ -13,7 +13,9 @@ from skimage.feature import peak_local_max
 from skimage.segmentation import watershed
 
 MIN_ROOM_AREA = 2.0       # m^2; smaller regions join their neighbour (closets, alcoves)
-MIN_CENTRE_GAP = 1.2      # m between room centres
+MIN_CENTRE_GAP = 0.8      # m between room centres. Was 1.2: a 1.2 m corridor's centre ridge (0.6 m) lies within
+                          # 1.2 m of the higher ridge of the room it opens into, so no corridor ever got a seed
+                          # and corridors merged into rooms. Extra seeds in big rooms are merged back below.
 MIN_HALF_WIDTH = 0.4      # m: a room centre is this far from the nearest edge (corridors from 0.8 m wide)
 NECK_RATIO = 0.7          # border >= 70 % of the wider region's width -> same room
 DOOR_MAX = 1.4            # m; a wider neck is an open-plan opening, not a door

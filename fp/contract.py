@@ -148,6 +148,9 @@ def fill_from_geometry(plan: dict, rooms: list[dict], connections: list[dict]) -
         a, b = c["rooms"]
         if a not in by_id or b not in by_id or not by_id[a]["walls"]:
             continue
+        if c.get("kind") == "wall":     # rooms share a wall, no opening found between them
+            plan["connections"].append({"rooms": [a, b], "opening_id": None})
+            continue
         room = by_id[a]
         oid = f"{a}.O{len(room['openings']) + 1}"
         room["openings"].append({

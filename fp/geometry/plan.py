@@ -193,26 +193,213 @@ def extract_room(P, N, ceiling_h, voxel, source_prior, debug: dict | None = None
     return _room(fp, o, lines, ceiling_h, source_prior, debug)
 
 
+TALL_BANDS = ((0.3, 0.9), (0.9, 1.5), (1.5, 2.1))  # m above the floor; furniture rarely reaches the top band
+TALL_MIN_BANDS = 2    # a wall (or a full-height wardrobe) has vertical surface in at least 2 of the 3 bands
+TALL_MIN_PTS = 3      # points of one band in a 2 cm cell; fewer is a stray return
+DOOR_GAP = (0.5, 1.3)  # m: a gap this wide between two runs of tall wall on one wall line is a doorway
+                       # (door leaves are 0.6-1.0 m; narrower gaps are pipes/columns, wider are open-plan)
+MIN_RUN = 0.25        # m of tall evidence along a wall line on each side of a doorway (a jamb or more)
+EXTERIOR_FLOOR_FRAC = 0.2  # a region the camera never entered with less than 20 % seen floor is outside air
+                           # seen through a window or doorway (rays carve it, nobody stood there)
+ADJ_GAP = 0.35        # m: two rooms whose edges are this close along a wall share that wall (partition <= 30 cm)
+ADJ_MIN_LEN = 0.5     # m of shared wall to call two rooms adjacent
+OVERLAP_TOL = 0.01    # polygon overlap above 1 % of the smaller room is repaired
+
+
+def tall_wall_mask(P, N, o, shape):
+    """Cells (RES grid at origin o) with vertical surface in >= TALL_MIN_BANDS height bands: walls and tall
+    cupboards. Partition walls are 8-15 cm thick, so the footprint's 18 cm closing fills them; cutting this
+    mask back out restores the walls between rooms."""
+    vert = np.abs(N[:, 2]) < 0.3
+    nb = np.zeros(shape, np.uint8)
+    for lo, hi in TALL_BANDS:
+        m = vert & (P[:, 2] > lo) & (P[:, 2] < hi)
+        ij = ((P[m, :2] - o) / RES).astype(int)
+        ok = (ij >= 0).all(1) & (ij[:, 0] < shape[0]) & (ij[:, 1] < shape[1])
+        h = np.zeros(shape, np.int32)
+        np.add.at(h, (ij[ok, 0], ij[ok, 1]), 1)
+        nb += h >= TALL_MIN_PTS
+    return nb >= TALL_MIN_BANDS
+
+
+def close_doorways(tall, lines, o):
+    """Along every wall line, a 0.5-1.3 m gap between two runs of tall wall is a doorway: bar it (3 cells
+    thick) so the rooms on either side become separate regions, and remember it as a door between them.
+    Returns (bar mask, [{axis, coord, a, b}] in plan metres)."""
+    bar, gaps = np.zeros(tall.shape, bool), []
+    for l in lines:
+        ax = l["axis"]
+        k = int(round((l["coord"] - o[ax]) / RES))
+        if not 1 <= k < tall.shape[ax] - 1:
+            continue
+        along = tall.take(range(k - 1, k + 2), axis=ax).any(axis=ax)   # tall evidence within 2 cm of the line
+        idx = np.nonzero(along)[0]
+        if len(idx) < 2:
+            continue
+        br = np.nonzero(np.diff(idx) > 1)[0]
+        runs = [(s, e) for s, e in zip(np.r_[idx[0], idx[br + 1]], np.r_[idx[br], idx[-1]])
+                if (e - s + 1) * RES >= MIN_RUN]
+        for (_, e0), (s1, _) in zip(runs, runs[1:]):
+            if DOOR_GAP[0] <= (s1 - e0 - 1) * RES <= DOOR_GAP[1]:
+                if ax == 0:
+                    bar[k - 1:k + 2, e0 + 1:s1] = True
+                else:
+                    bar[e0 + 1:s1, k - 1:k + 2] = True
+                gaps.append({"axis": ax, "coord": l["coord"], "a": o[1 - ax] + (e0 + 1) * RES,
+                             "b": o[1 - ax] + s1 * RES})
+    return bar, gaps
+
+
+def _gap_doors(gaps, lab, o):
+    """Each closed doorway -> a connection between the regions found just either side of it."""
+    out = []
+    for g in gaps:
+        ax, m = g["axis"], 0.5 * (g["a"] + g["b"])
+        side = []
+        for sgn in (-1, 1):
+            for d in np.arange(0.06, 0.5, 0.02):           # walk away from the bar until a room is hit
+                p = np.array([g["coord"] + sgn * d, m] if ax == 0 else [m, g["coord"] + sgn * d])
+                i, j = ((p - o) / RES).astype(int)
+                if 0 <= i < lab.shape[0] and 0 <= j < lab.shape[1] and lab[i, j]:
+                    side.append(int(lab[i, j]))
+                    break
+        if len(side) == 2 and side[0] != side[1]:
+            c = [g["coord"], m] if ax == 0 else [m, g["coord"]]
+            out.append({"rooms": [f"R{min(side)}", f"R{max(side)}"], "kind": "door",
+                        "width_m": round(g["b"] - g["a"], 2), "center": [round(float(v), 3) for v in c]})
+    return out
+
+
 def extract_rooms(P, N, ceiling_h, voxel, source_prior, rays=None, cams=None):
-    """The whole floor: footprint split into rooms at doorways (fp/geometry/rooms.py), one polygon per
-    room on the shared wall lines, and the doors between rooms. Returns (rooms, connections, debug)."""
+    """The whole floor: footprint minus tall walls, doorways closed along wall lines, split into rooms
+    (fp/geometry/rooms.py watershed for the open necks that remain), one rectilinear polygon per room on the
+    wall lines, overlaps repaired, and the connections between rooms (doors and shared walls).
+    Returns (rooms, connections, debug)."""
     from fp.geometry.rooms import doors, split_rooms
     lines = _wall_lines(P, N, ceiling_h, voxel)
     fp, o = _footprint(P, N, ceiling_h, rays, cams)
-    lab = split_rooms(fp, RES)
-    rooms = []
+    tall = tall_wall_mask(P, N, o, fp.shape)
+    bar, gaps = close_doorways(tall, lines, o)
+    free = fp & ~ndimage.binary_dilation(tall) & ~bar
+    free = ndimage.binary_opening(free, iterations=2)       # drop 1-2 cell slivers left along the walls
+    lab = split_rooms(free, RES)
+    floor = _surface_cells(P, N, ceiling_h, o, fp.shape)
+    inside_cam = np.zeros(fp.shape, bool)
+    if cams is not None and len(cams):
+        ij = ((cams[:, :2] - o) / RES).astype(int)
+        ok = (ij >= 0).all(1) & (ij[:, 0] < fp.shape[0]) & (ij[:, 1] < fp.shape[1])
+        inside_cam[ij[ok, 0], ij[ok, 1]] = True
+    rooms, masks, dropped = [], {}, []
     for k in range(1, lab.max() + 1):
+        m = lab == k
+        if not inside_cam[m].any() and floor[m].mean() < EXTERIOR_FLOOR_FRAC:
+            dropped.append({"label": k, "area_m2": round(float(m.sum() * RES * RES), 2),
+                            "floor_frac": round(float(floor[m].mean()), 2)})
+            continue
         try:
-            r = _room(lab == k, o, lines, ceiling_h, source_prior)
+            poly, near = _mask_polygon(m, o, lines)
         except (ValueError, IndexError):  # region too thin for a polygon: leave it out
             continue
-        if len(r["polygon"]) < 3 or r["area_m2"] <= 0:
+        if poly.is_empty or poly.area <= 0 or len(poly.exterior.coords) < 4:
             continue
-        r["id"] = r["name"] = f"R{k}"
-        rooms.append(r)
-    kept = {r["id"] for r in rooms}
-    conns = [c for c in doors(lab, o, RES) if set(c["rooms"]) <= kept]
-    return rooms, conns, {"lines": lines, "footprint": fp, "labels": lab, "origin": o}
+        rooms.append({"id": f"R{k}", "poly": poly, "lines": near})
+        masks[f"R{k}"] = m
+    overlaps = _repair_overlaps(rooms, masks, o)
+    out = []
+    for r in rooms:
+        if r["poly"].is_empty or r["poly"].area <= 0:
+            continue
+        d = _room_from_polygon(r["poly"], r["lines"], ceiling_h, source_prior)
+        d.update(id=r["id"], name=r["id"], width_m=polygon_width(r["poly"]))
+        out.append(d)
+    kept = {r["id"] for r in out}
+    conns = [c for c in doors(lab, o, RES) + _gap_doors(gaps, lab, o) if set(c["rooms"]) <= kept]
+    conns = _dedupe(conns) + _wall_adjacency(out, conns)
+    return out, conns, {"lines": lines, "footprint": fp, "labels": lab, "origin": o, "tall": tall, "bar": bar,
+                        "gaps": gaps, "dropped": dropped, "overlaps": overlaps}
+
+
+def polygon_width(poly, tol=0.01) -> float:
+    """Diameter of the widest circle that fits in the polygon (bisection on an inward offset). A corridor's is
+    its width; the room polygon ignores furniture, which the free-space mask does not."""
+    lo, hi = 0.0, 0.5 * min(poly.bounds[2] - poly.bounds[0], poly.bounds[3] - poly.bounds[1]) + tol
+    while hi - lo > tol / 2:
+        mid = 0.5 * (lo + hi)
+        lo, hi = (mid, hi) if not poly.buffer(-mid).is_empty else (lo, mid)
+    return round(2 * lo, 2)
+
+
+def _surface_cells(P, N, ceiling_h, o, shape):
+    """Cells with an up-facing surface between the floor and the ceiling (floor, beds, counters)."""
+    top = (ceiling_h + 0.1) if ceiling_h else 2.6
+    m = (N[:, 2] > 0.9) & (P[:, 2] > -0.08) & (P[:, 2] < top)
+    ij = ((P[m, :2] - o) / RES).astype(int)
+    ok = (ij >= 0).all(1) & (ij[:, 0] < shape[0]) & (ij[:, 1] < shape[1])
+    out = np.zeros(shape, bool)
+    out[ij[ok, 0], ij[ok, 1]] = True
+    return ndimage.binary_closing(out, iterations=2)
+
+
+def _repair_overlaps(rooms, masks, o):
+    """Rooms are drawn on a shared wall-line grid, so two polygons can claim the same cell. An overlap above
+    OVERLAP_TOL of the smaller room goes to the room whose own footprint (bounded by its walls) covers more of
+    it; the other polygon loses it. Returns what was repaired, for the warnings."""
+    from shapely import contains_xy
+    out = []
+    for a in range(len(rooms)):
+        for b in range(a + 1, len(rooms)):
+            A, B = rooms[a], rooms[b]
+            inter = A["poly"].intersection(B["poly"])
+            small = min(A["poly"].area, B["poly"].area)
+            if inter.area <= OVERLAP_TOL * small:
+                continue
+            x0, y0, x1, y1 = inter.bounds
+            gx, gy = np.meshgrid(np.arange(x0, x1, RES) + RES / 2, np.arange(y0, y1, RES) + RES / 2, indexing="ij")
+            ins = contains_xy(inter, gx, gy)
+            i, j = ((gx[ins] - o[0]) / RES).astype(int), ((gy[ins] - o[1]) / RES).astype(int)
+            score = lambda r: int(masks[r["id"]][np.clip(i, 0, masks[r["id"]].shape[0] - 1),
+                                                np.clip(j, 0, masks[r["id"]].shape[1] - 1)].sum())
+            win, lose = (A, B) if score(A) >= score(B) else (B, A)
+            rest = lose["poly"].difference(win["poly"])
+            if rest.geom_type == "MultiPolygon":
+                rest = max(rest.geoms, key=lambda g: g.area)
+            rest = orient(Polygon(rest.exterior).simplify(0.005), 1.0) if not rest.is_empty else rest
+            out.append({"rooms": [win["id"], lose["id"]], "overlap_m2": round(inter.area, 2),
+                        "frac_of_smaller": round(inter.area / small, 3)})
+            lose["poly"] = rest
+    return out
+
+
+def _dedupe(conns, tol=0.5):
+    """One connection per opening: the watershed border and a closed doorway can find the same door."""
+    out = []
+    for c in conns:
+        if not any(set(c["rooms"]) == set(d["rooms"]) and np.hypot(*np.subtract(c["center"], d["center"])) < tol
+                   for d in out):
+            out.append(c)
+    return out
+
+
+def _wall_adjacency(rooms, conns):
+    """Rooms that share a wall (edges within ADJ_GAP for >= ADJ_MIN_LEN) but have no door between them:
+    adjacency without an opening."""
+    have = {tuple(sorted(c["rooms"])) for c in conns}
+    out = []
+    for a in range(len(rooms)):
+        for b in range(a + 1, len(rooms)):
+            A, B = (Polygon(rooms[k]["polygon"]) for k in (a, b))
+            key = tuple(sorted((rooms[a]["id"], rooms[b]["id"])))
+            if key in have:
+                continue
+            inter = A.buffer(ADJ_GAP / 2, join_style=2).intersection(B.buffer(ADJ_GAP / 2, join_style=2))
+            if inter.is_empty:
+                continue
+            x0, y0, x1, y1 = inter.bounds
+            if max(x1 - x0, y1 - y0) >= ADJ_MIN_LEN:
+                c = inter.centroid
+                out.append({"rooms": list(key), "kind": "wall", "width_m": None,
+                            "center": [round(c.x, 3), round(c.y, 3)]})
+    return out
 
 
 def _crosses(line, x0, x1, y0, y1, margin=0.3):
@@ -224,6 +411,12 @@ def _crosses(line, x0, x1, y0, y1, margin=0.3):
 
 def _room(fp, o, all_lines, H, source_prior, debug: dict | None = None):
     """One room's footprint mask -> rectilinear polygon whose edges sit on wall planes, and its walls."""
+    poly, lines = _mask_polygon(fp, o, all_lines, debug)
+    return _room_from_polygon(poly, lines, H, source_prior)
+
+
+def _mask_polygon(fp, o, all_lines, debug: dict | None = None):
+    """Footprint mask -> (rectilinear shapely polygon on the wall-line grid, the wall lines near it)."""
     ii, jj = np.nonzero(fp)
     x0, x1, y0, y1 = o[0] + ii.min() * RES, o[0] + ii.max() * RES, o[1] + jj.min() * RES, o[1] + jj.max() * RES
     lines = [l for l in all_lines if _crosses(l, x0, x1, y0, y1)]
@@ -248,9 +441,12 @@ def _room(fp, o, all_lines, H, source_prior, debug: dict | None = None):
     if poly.geom_type == "MultiPolygon":
         poly = max(poly.geoms, key=lambda g: g.area)
     poly = orient(Polygon(poly.exterior).simplify(0.005), 1.0)
-
     pts = _merge_steps(list(poly.exterior.coords)[:-1], lines)
-    poly = orient(Polygon(pts), 1.0)
+    return orient(Polygon(pts), 1.0), lines
+
+
+def _room_from_polygon(poly, lines, H, source_prior):
+    """Rectilinear polygon -> room dict: one wall per edge, matched to the wall line it sits on (observed) or not."""
     pts = list(poly.exterior.coords)[:-1]
     walls = []
     for k in range(len(pts)):
