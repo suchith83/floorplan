@@ -130,7 +130,7 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
               drift_correction: bool = True) -> dict:
     """Ingest -> recon -> align -> rooms, filling `plan` in place. Returns the internal (pre-schema) result
     that the damage step still works on."""
-    from fp.geometry.align import CEILING_MIN_AREA, FloorNotFound, align, to_plan
+    from fp.geometry.align import FloorNotFound, align, to_plan
     from fp.geometry.plan import extract_room, extract_rooms
     from fp.ingest import load_capture
     from fp.report.debug import bev_png
@@ -155,9 +155,6 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
             al = align(rec, assume_floor_below_camera=ASSUMED_CAMERA_H)
     T = al["T_plan_world"]
     P, N = to_plan(T, rec.points), rec.normals @ T[:3, :3].T
-    if al["ceiling_h"] is None:
-        warn("ceiling", f"No ceiling layer of at least {CEILING_MIN_AREA:g} m2 was seen (highest point "
-                        f"{P[:, 2].max():.2f} m above the floor), so ceiling height is not observed.")
     with _timed(timings, "rooms"):
         rays = _plan_rays(rec, T)
         traj = bundle.meta.get("_trajectory")
@@ -183,7 +180,17 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
         for a, b, f in check_overlaps(rooms):
             warn("rooms", f"{a} and {b} still overlap by {100 * f:.1f} % of the smaller room.")
         _name_rooms(rooms, bundle, T)
-    contract.fill_from_geometry(plan, rooms, conns)
+    with _timed(timings, "ceiling"):
+        ceilings = _ceilings(rooms, P, N, rec.meta.get("voxel", 0.02), warn)
+    with _timed(timings, "openings"):
+        openings = _openings(rooms, rec, T, P, N, ceilings, out / "debug" / "openings", tier, warn)
+    contract.fill_from_geometry(plan, rooms, conns, openings, ceilings)
+    _rough_connections(plan, openings, warn)
+    if openings:
+        from fp.geometry.openings import evidence_sheets
+        with _timed(timings, "openings_debug"):
+            evidence_sheets(out / "debug" / "openings", [o for o in openings if "id" in o],
+                            _walls_by_room(rooms), rec.frames, T)
     plan["frame"]["T_plan_world"] = T.round(6).tolist()
     plan["source"].update(gravity=rec.meta.get("up_source", al["up_source"]), yaw_deg=al["yaw_deg"], camera_h_m=round(al["camera_h"], 2))
     bev_png(out / "debug" / "bev.png", P, N, plan, al["ceiling_h"])
@@ -191,6 +198,61 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
     with _timed(timings, "drift_metrics"):
         _drift_report(out / "debug", plan, P, N, cams, al["ceiling_h"], rec, drift, drift_correction, tier, warn)
     return {"bundle": bundle, "rooms": rooms, "connections": conns, "T_plan_world": T.round(6).tolist()}
+
+
+def _ceilings(rooms, P, N, voxel, warn) -> dict:
+    """Per-room ceiling (fp/geometry/ceiling.py); not-observed reasons and extra layers go to the warnings."""
+    from fp.geometry.ceiling import room_ceiling
+    out = {}
+    for r in rooms:
+        c = out[r["id"]] = room_ceiling(P, N, r["polygon"], voxel, room_id=r["id"])
+        if c["h"] is None:
+            warn("ceiling", f"{r['id']}: ceiling not observed: {c['reason']}")
+        for o in c["other_layers"]:
+            warn("ceiling", f"{r['id']}: multi-level ceiling: another down-facing layer at {o['h']:.2f} m over "
+                            f"{o['area_m2']:.1f} m2 (reported: the largest layer, {c['h']:.2f} m). A beam, bulkhead "
+                            "or false ceiling.")
+    return out
+
+
+def _openings(rooms, rec, T, P, N, ceilings, debug, tier, warn) -> list[dict] | None:
+    """Doors, windows, passages from wall elevations (fp/geometry/openings.py). None when the frames have no
+    depth (then the floor-neck doorways from the room split stay as they are)."""
+    from fp.geometry import openings as op
+    if not rec.frames or any(f.depth is None or f.T_wc is None for f in rec.frames):
+        warn("openings", "No depth frames: openings were not measured; doorways are floor-footprint necks only.")
+        return None
+    try:
+        found, info = op.detect(rooms, rec.frames, T, P, N, rec.meta.get("voxel", 0.02),
+                                {k: c["h"] for k, c in ceilings.items()}, debug, contract.TIER_SCALE[tier])
+    except Exception as e:     # never lose the floor plan over openings
+        warn("openings", f"Opening detection failed: {type(e).__name__}: {e}")
+        return None
+    for c in info["rejected"]:
+        if c["kind"] and c["why"].startswith(("mirror", "recess")):
+            warn("openings", f"{c['wall_id']}: a {c['width_m']:.2f} m {c['kind']}-shaped gap was not counted: "
+                             f"{c['why']} (debug/openings/{c['wall_id']}.png).")
+    return found
+
+
+def _walls_by_room(rooms):
+    from fp.geometry.openings import _walls
+    out = {}
+    for w in _walls(rooms):
+        out.setdefault(w["room"], []).append(w)
+    return out
+
+
+def _rough_connections(plan, openings, warn):
+    """Room pairs the floor split connects but no measured opening does: say so (they keep 03's neck width)."""
+    if openings is None:
+        return
+    for r in plan["rooms"]:
+        for o in r["openings"]:
+            if not o["width"]["observed"] and o["width"]["method"].startswith("narrowest neck"):
+                warn("openings", f"{o['id']} ({o['rooms'][0]}-{o['rooms'][1]}): the floor footprint narrows to "
+                                 f"{o['width']['value']:.2f} m here but no opening was found in the wall elevations; "
+                                 "kept as a rough connection, width not measured.")
 
 
 def _drift_report(debug, plan, P, N, cams, ceiling_h, rec, drift, enabled, tier, warn):

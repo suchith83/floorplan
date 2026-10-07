@@ -99,9 +99,10 @@ def _pos_half(wall: dict, tier: str) -> float:
     return pos * (1.0 if wall["observed"] else INFERRED_FACTOR)
 
 
-def room_to_schema(room: dict, tier: str, extra_rel: float = 0.0) -> dict:
+def room_to_schema(room: dict, tier: str, extra_rel: float = 0.0, ceiling: dict | None = None) -> dict:
     """One room from fp.geometry.plan._room (+ id/name) -> schema Room. Openings are added later.
-    extra_rel: added to the tier's relative scale term when the learned scale disagrees with priors."""
+    extra_rel: added to the tier's relative scale term when the learned scale disagrees with priors.
+    ceiling: this room's result from fp.geometry.ceiling.room_ceiling (None: the whole-capture value)."""
     rid, walls = room["id"], room["walls"]
     rel = SCALE_REL[tier] + extra_rel
     pos = [_pos_half(w, tier) for w in walls]
@@ -118,10 +119,15 @@ def room_to_schema(room: dict, tier: str, extra_rel: float = 0.0) -> dict:
     all_seen = all(w["observed"] for w in walls)
     area_half = float(np.sum(lengths * pos)) + 2 * rel * room["area_m2"]
     perim_half = 2 * float(np.sum(pos)) + rel * float(lengths.sum())
-    H = room.get("ceiling_h_m")
-    ceiling = (measure(H, CEILING_HALF * TIER_SCALE[tier] + rel * H, "m",
-                       "ceiling layer minus floor layer (whole capture)")
-               if H is not None else not_observed("m", "no ceiling layer found"))
+    if ceiling is not None:
+        H = ceiling["h"]
+        ceiling = (measure(H, ceiling["half"] * TIER_SCALE[tier] + rel * H, "m", ceiling["method"])
+                   if H is not None else not_observed("m", ceiling.get("reason") or "no ceiling layer found"))
+    else:
+        H = room.get("ceiling_h_m")
+        ceiling = (measure(H, CEILING_HALF * TIER_SCALE[tier] + rel * H, "m",
+                           "ceiling layer minus floor layer (whole capture)")
+                   if H is not None else not_observed("m", "no ceiling layer found"))
     return {
         "id": rid, "name": room.get("name") or rid,
         "polygon": [[float(x), float(y)] for x, y in room["polygon"]],
@@ -141,16 +147,57 @@ def _nearest_wall(room: dict, c) -> dict:
     return min(room["walls"], key=dist)
 
 
-def fill_from_geometry(plan: dict, rooms: list[dict], connections: list[dict]) -> None:
-    """Rooms and doorway necks from fp.geometry -> plan rooms, openings, connections, footprint."""
+def _m(d: dict | None, tier_scale: float, rel: float, unit: str = "m") -> dict | None:
+    """Internal {value, half, method, observed} (LiDAR-scale half) -> Measure scaled for the tier."""
+    if d is None:
+        return None
+    if d["value"] is None:
+        return not_observed(unit, d["method"])
+    return measure(d["value"], d["half"] * tier_scale + rel * d["value"], unit, d["method"], observed=d["observed"])
+
+
+def add_openings(plan: dict, openings: list[dict]) -> set[tuple[str, str]]:
+    """Openings from fp.geometry.openings -> schema Openings (ids R<n>.O<k> under the owner room) and one
+    Connection per opening between two rooms. Writes the id back into each internal dict. Returns the room
+    pairs now connected by a measured opening."""
+    tier = plan["tier"]
+    extra = ((plan["source"].get("recon") or {}).get("scale_check") or {}).get("extra_rel", 0.0)
+    rel, ts = SCALE_REL[tier] + extra, TIER_SCALE[tier]
+    by_id = {r["id"]: r for r in plan["rooms"]}
+    pairs = set()
+    for o in openings:
+        room = by_id.get(o["room"])
+        if room is None:
+            continue
+        oid = f"{room['id']}.O{len(room['openings']) + 1}"
+        o["id"] = oid
+        rooms = o["rooms"] if o["rooms"] and all(r in by_id for r in o["rooms"]) else None
+        room["openings"].append({
+            "id": oid, "kind": o["kind"], "wall_id": o["wall_id"], "rooms": rooms,
+            "width": _m(o["width"], ts, rel), "height": _m(o["height"], ts, rel), "sill": _m(o["sill"], ts, rel),
+            "center": [float(v) for v in o["center"]]})
+        if rooms:
+            plan["connections"].append({"rooms": rooms, "opening_id": oid})
+            pairs.add(tuple(sorted(rooms)))
+    return pairs
+
+
+def fill_from_geometry(plan: dict, rooms: list[dict], connections: list[dict], openings: list[dict] | None = None,
+                       ceilings: dict | None = None) -> None:
+    """Rooms, openings and ceilings from fp.geometry -> plan rooms, openings, connections, footprint.
+    openings: measured openings (fp.geometry.openings.detect); 03's floor-neck doorways are then kept only
+    between rooms that no measured opening connects. ceilings: room id -> fp.geometry.ceiling result."""
     tier = plan["tier"]
     # camera tiers: a learned scale that disagrees with priors widens intervals (fp/recon/camera.scale_check)
     extra = ((plan["source"].get("recon") or {}).get("scale_check") or {}).get("extra_rel", 0.0)
-    plan["rooms"] = [room_to_schema(r, tier, extra) for r in rooms]
+    plan["rooms"] = [room_to_schema(r, tier, extra, (ceilings or {}).get(r["id"])) for r in rooms]
     by_id = {r["id"]: r for r in plan["rooms"]}
+    linked = add_openings(plan, openings) if openings is not None else set()
     for c in connections:
         a, b = c["rooms"]
         if a not in by_id or b not in by_id or not by_id[a]["walls"]:
+            continue
+        if tuple(sorted((a, b))) in linked:   # a measured opening already connects them
             continue
         if c.get("kind") == "wall":     # rooms share a wall, no opening found between them
             plan["connections"].append({"rooms": [a, b], "opening_id": None})
