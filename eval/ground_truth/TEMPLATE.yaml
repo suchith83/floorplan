@@ -1,0 +1,72 @@
+# Ground truth (tape / laser) for ONE capture. Copy to eval/ground_truth/<capture>.yaml and fill in.
+#
+# Rules
+# - Every length is in METRES. Give 1 to 3 readings as a list: [2.415, 2.417, 2.416].
+#   The scorer uses their mean; max - min is the spread (more than 5 cm is flagged as a probable typo).
+#   A single number (2.415) is allowed too.
+# - Names are yours: write them so you can recognise the wall later ("window wall", "wall with radiator").
+#   Do not use '/' in names (it separates room/wall in the overrides file).
+# - Measure walls corner to corner at skirting height, wall face to wall face (what the plan measures).
+# - Fields marked (optional) can be left out. Wrong guesses by the matcher are fixed in
+#   eval/ground_truth/<capture>.match.yaml (see eval/match_gt.py), so you rarely need plan IDs here.
+#
+# Check a file and see how it matches a plan:
+#   uv run python eval/match_gt.py out/<capture>/plan.json eval/ground_truth/<capture>.yaml
+
+capture: my_flat_lidar_01          # capture id = the folder name under data/ and out/
+tool: "Bosch GLM 50C laser"        # what you measured with, e.g. "Stanley 5 m tape"; add a second tool in a comment
+
+rooms:
+  - name: kitchen                  # matches the plan room name (photo-folder name), case-insensitive
+    # plan_room: R2                # (optional) force the plan room id when the names don't match
+    # area_m2: 11.9                # (optional) floor area you computed by hand; if EVERY room has one,
+    #                              #   the footprint (sum of rooms) is scored too
+    ceiling: [2.412, 2.415, 2.413] # floor to ceiling, three spots in the room (centre, two corners)
+    walls:
+      - name: window wall
+        length: [3.982, 3.985, 3.983]
+        dir: +y                    # (optional, recommended) the side of the room this wall is on, as seen
+                                   #   in plan.svg: +x right, -x left, +y up, -y down (its outward normal).
+                                   #   With dir the matcher picks among walls facing that way; without
+                                   #   it, it guesses from length alone ("auto-length": check it).
+      - name: door wall
+        length: [3.980, 3.981]
+        dir: -y
+      - name: fridge wall
+        length: [2.975, 2.977, 2.976]
+        dir: -x
+        # plan_wall: R2.W4         # (optional) force the plan wall id
+      - name: sink wall
+        length: 2.976
+        dir: +x
+    openings:                      # list each door/passage ONCE, under either of the rooms it joins
+      - name: back door
+        kind: door                 # door | window | passage (passage = opening with no door leaf)
+        wall: door wall            # one of this room's wall names above
+        width: [0.826, 0.827, 0.826]   # clear width between the jambs (frame to frame, not the leaf)
+        height: [2.035, 2.036]     # (optional) floor to underside of the head
+      - name: window
+        kind: window
+        wall: window wall
+        width: [1.195, 1.197, 1.196]
+        height: [1.180, 1.181]     # (optional) opening height
+        sill: [0.905, 0.906]       # (optional) floor to sill
+
+  - name: hall
+    ceiling: [2.414, 2.416, 2.415]
+    walls:
+      - name: front wall           # the hall wall on the far side of the kitchen door
+        length: [1.995, 1.996, 1.995]
+        dir: -y
+      - name: long wall
+        length: [3.210, 3.212]
+        dir: +x
+    openings: []
+
+# Cross lines: one straight laser shot through a doorway, between two PARALLEL walls in different rooms.
+# They check that rooms are stitched in the right place, not only sized right. Two are enough.
+cross_lines:
+  - name: kitchen window to hall front
+    from: {room: kitchen, wall: window wall}
+    to: {room: hall, wall: front wall}
+    length: [5.214, 5.216, 5.215]
