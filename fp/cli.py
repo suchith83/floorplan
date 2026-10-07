@@ -22,6 +22,8 @@ from fp.contract import StageError, StageNotBuilt
 
 PREDICTED_MAX_DEPTH = 5.0  # m; predicted depth is less reliable far away
 ASSUMED_CAMERA_H = 1.2    # m above the floor, used only when no floor is seen
+HEADING_WORSE_DEG = 0.5   # deg: warn when drift correction widens the heading spread by more than this; 0.5 deg is
+                          # the bin of the Manhattan-axis histogram, so smaller rises are within measurement noise
 
 
 @contextmanager
@@ -220,6 +222,11 @@ def _drift_report(debug, plan, P, N, cams, ceiling_h, rec, drift, enabled, tier,
               "footprint_m2_off": round(sum(r["area_m2"] for r in rooms_off), 2),
               "footprint_m2_on": round(sum(r["floor_area"]["value"] for r in plan["rooms"]), 2)})
     plan["drift"] = {"method": res.method, "enabled": True, "metrics": m}
+    hb, ha = m.get("heading_spread_before_deg", np.nan), m.get("heading_spread_after_deg", np.nan)
+    if ha > hb + HEADING_WORSE_DEG:   # loop RMSE only scores accepted loops; drift too big to accept stays hidden there
+        warn("drift", f"Drift correction widened the heading spread across submaps ({hb:.2f} -> {ha:.2f} deg): "
+                      "heading drift may be larger than the loop checks accept, so walls far apart in time may "
+                      "still disagree. Compare debug/drift_ablation.png and the --no-drift-correction run.")
     fmt = lambda q, fa, n: [f"median wall thickness {q['thickness_median_cm']:.2f} cm",
                             f"double walls (red): {len(q['double_walls'])}", f"{n} rooms, footprint {fa:.1f} m2"]
     drift_ablation_png(debug / "drift_ablation.png", [
