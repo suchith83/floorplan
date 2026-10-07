@@ -253,7 +253,53 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
 - 08 (protocol): photos must overlap (sweeps, ~half a view between neighbours, a doorway photo in both folders); video
   is the stronger camera tier.
 - 07: calibrate camera-tier intervals; `eval/cross_tier.py` gives the per-room errors against the LiDAR reference.
-## 06 — Damage regions, concealed-damage flags, scope line items: not started
+## 06 — Damage regions, concealed-damage flags, scope line items: **done on sample data; staged-damage acceptance pending own capture**
+- **A. Detection, local** (`fp/damage/detect_local.py`, D06.1): Grounding DINO tiny (one text pass, all 5 classes:
+  crack, water_stain, mold, peeling_paint, hole) + SAM 2.1 small (box -> mask). SAM 3 is gated (401 on this Mac;
+  a cold evaluator run would need HF approval), so it stays `--backend modal` only. Published default thresholds
+  (box 0.35, text 0.25). A phrase must name exactly one class; masks > 25 % of the image are dropped. Deterministic
+  per-image cache under `out/_cache/damage/`. MPS: 0.65 s + 0.3 s per full-res frame, ~30 s model load. `transformers`
+  added (`uv add`; huggingface-hub 2.0 -> 1.33, MapAnything still imports and runs).
+- **Frames**: sharpest in each of 30 slots; LiDAR frames decoded at full res from rgb.mp4 by video index and turned
+  upright from the pose; camera tiers use the original (upright) photo / video frame.
+- **B. Placement + extent** (`fp/damage/project.py`, D06.2): mask coverage on the depth image -> plan points -> nearest
+  wall plane (15 cm) / floor / ceiling; >= 50 % of the mask within 8 cm of that plane, else dropped (furniture).
+  Extent = Σ coverage × z²/(fx·fy·|cos a|); merge = same class + surface within 30 cm (median extent; interval = max(20 %
+  + 2 × tier scale term, views' spread)). **Confirmation from a second viewpoint** (D06.3): each detection is looked
+  for again in up to 2 frames from a camera >= 25 cm away; unconfirmed ones are listed in a warning with their crop
+  (`damage/unconfirmed_k.jpg`), not reported as damage.
+- **C. Rules** (`fp/damage/rules.py`, D06.4): C1–C4 kept, C5 added (wet damage high on a wall or on a ceiling in or next to
+  a wet room, `--wet-rooms`); every flag has rule_id, rule_text, evidence, label "hypothesis".
+- **D. Scope** (`fp/scope.py`, D06.5): repaint wall (length × ceiling − openings through it, both partition faces),
+  patch and fill (count), mould treatment / stain-block (sum of extents), repaint ceiling / replace floor finish (floor
+  area), skirting (perimeter − doors/passages); interval arithmetic, worst case.
+- **Sample data** (no real damage on it; verifier looked at every crop):
+  | capture | detections | confirmed items | unconfirmed | damage s | verdict on confirmed |
+  |---|---|---|---|---|---|
+  | c00a170fe1 | 8 | 1 (hole on R3.W4) | 3 | 16 | false: a dark picture/mirror rectangle |
+  | c7d28f72c6 | 8 | 1 (crack on R1.ceiling, 0.003 m²) | 4 | 43 | doubtful: a straight ceiling board joint |
+  | 1a8384c3f6 | 8 | 3 (2 floor "water stains", 1 floor "crack") | 3 | 40 | false: a basket's shadow, a shadow on tile, a grout line |
+  0 true, 4 false, 1 doubtful among confirmed items; all 13 unconfirmed were correctly rejected (shadows, a reflection,
+  a grille, a downlight, tile). Static shadows survive the viewpoint check (they stay put too).
+- **Painted acceptance on real frames** (`uv run python scripts/exp06_damage.py data/stray/c00a170fe1`; frames
+  `out/_exp06/c00a170fe1/painted_*.jpg`): a 0.25 m tea-stain blotch at 0.4 m on R1.W4 is **found on R1.W4**, 5 views,
+  extent **0.0547 [0.0438, 0.0657] m² vs 0.0491 painted (+11 %, interval contains it)**. A drawn 0.30 m zigzag crack,
+  clearly visible in 4 frames, is **missed** (never detected). Caveat (verifier): R1.W4 is a built-in wardrobe front the
+  plan treats as wall.
+- **Own capture with staged damage: pending own capture** (`data/own/` does not exist). One command when it does:
+  `uv run fp run data/own/<video.mp4 | photos folder> --wet-rooms <ids>`; evidence crops in `out/<capture>/damage/`.
+- Tests: `tests/test_damage.py` (12: extent face-on and 34° off within 15 %, furniture dropped, ceiling snap, upright
+  turns, labels, cache replay, rules C1–C5 incl. a wet neighbour, scope values + surface ids validate, door on both
+  partition faces). **129 pass.**
+- **Verifier** (fresh agent): honesty and placement pass; rules 16/16 cases; adversarial (no damage, empty mask, zero
+  depth, no ceilings) safe. Its bugs fixed: door not subtracted from the other partition face (R9.W1 billed 39 % too
+  much), assumed opening height still "observed", C5 ignored wet neighbours of a ceiling, stale unconfirmed crops,
+  extents printed as 0.00, stain-block on a floor being replaced.
+- **Known problems / what 07+ need to know**
+  - Detector misses a clean drawn crack; damage recall on real staged damage is unknown until the own capture.
+  - `place()` would give a large extent for a near full-image mask (filtered only by the detector's 25 % rule).
+  - Timings: c7d2 total 162 s with damage (43 s); the earlier 226 s (04) was measured while other jobs ran.
+  - Camera tiers: damage runs on model depth there (not evaluated; the confirmation step needs depth in the other frames).
 ## 07 — Calibrated intervals and the benchmark harness: not started
 ## 08 — Capture protocol, device matrix, README, report, compliance matrix: not started
 ## 09 — The fix loop: not started
