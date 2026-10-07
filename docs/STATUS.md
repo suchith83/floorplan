@@ -114,7 +114,34 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
 - `plan["source"]` now carries `room_occupancy_s` and `wall_thickness_cm`; the camera path is in
   `bundle.meta["_trajectory"]` (all frames, before the filter).
 - c7d28f72c6 (with ceiling) not run in this work order.
-## 03 — Drift accountability and the stitched whole-property plan (LiDAR): not started
+## 03 — Drift accountability and the stitched whole-property plan (LiDAR): **in progress (checkpoint 7 Oct ~22:00 IST)**
+**Done (committed)**
+- **B. Stitch** (`fp/geometry/plan.py extract_rooms`, `rooms.py`, `cli.py rank_rooms`): tall wall evidence (vertical surface
+  in >= 2 of 3 height bands) is cut back out of the footprint (its 18 cm closing filled partition walls); 0.5-1.3 m gaps
+  between runs of tall wall on a wall line are barred as doorways (= door connections); watershed seed spacing 1.2 -> 0.8 m
+  (corridors got no seed before); overlaps > 1 % repaired in favour of the room whose own footprint covers more of
+  the overlap; shared walls give an adjacency without an opening (`opening_id: null`); regions never entered with < 20 % floor
+  seen are dropped (air seen through windows); rooms ordered by area; <= 1.6 m wide and >= 2.5 m long (polygon) -> "connector".
+  Results without drift correction: **1a8384c3f6** 3 -> 8 rooms, 1 connector, 7 doors + 3 shared walls (R2/R8 overlap 16 % repaired),
+  128 s; **c7d28f72c6** 8 rooms, 1 connector, 7 doors + 3 shared walls, 199 s internal (24 min wall clock under CPU contention).
+  Known: part of the corridor merges into the open kitchen / junction (no wall at wall-band height); c7d2 R6 is a region
+  outside a window (0 s inside, warned partially observed). Tests: `tests/test_stitch.py`.
+- **C. tooling**: `fp/geometry/register2d.py` (yaw 0/90/180/270 + FFT shift + 2-D ICP), `scripts/repeatability.py`;
+  `fp run` saves `debug/wall_points_2d.npy`. Pre-drift result: same flat, yaw 90.9 deg, 55 % inliers (runner-up 27 %),
+  6/8 rooms matched, wall-to-wall spans median |diff| 1.9 cm, **3/12** within max(1 cm, 0.5 %); polygon edges 0/17 (segmentation).
+- **A. Drift (WIP, commit 958b5e3)**: `fp/recon/drift.py` written by a subagent (synthetic tests pass), wired into `fp run`
+  (`reconstruct` -> `correct_drift` -> `fuse_depth_ablation`; `_drift_report` fills `plan.drift` and writes
+  `debug/drift_ablation.png`). **Never run on real data yet.** The subagent's worktree is at
+  `.claude/worktrees/agent-a654aff8f33d38c23` (same files; delete once 03 is done).
+
+**Resume here (next session)**
+1. `uv run python scripts/exp03_drift.py data/stray/c7d28f72c6` (and 1a83, c00a): off / posegraph / plane table; pick the method
+   that measurably helps (fallback `method="plane"` exists), record it in DECISIONS.
+2. `uv run fp run data/stray/c7d28f72c6 --no-damage` and `1a8384c3f6` (drift on; check < 10 min, view `debug/drift_ablation.png`),
+   plus `--no-drift-correction` runs. Fix whatever breaks in `_drift_report`.
+3. `uv run python scripts/repeatability.py out/1a8384c3f6 out/c7d28f72c6 --md eval/repeatability_lidar.md`, add the
+   reasons the scans differ (segmentation, wall coverage, ceiling pass).
+4. Verifier subagent, then DECISIONS (D11 stitch, D12 drift, D13 repeatability), `docs/defense/03-drift-and-stitch.md`, hand-off.
 ## 04 — Openings (doors, windows, passages) and per-room ceiling height: not started
 ## 05 — Video and photo tiers (no depth, no poses): not started
 ## 06 — Damage regions, concealed-damage flags, scope line items: not started
