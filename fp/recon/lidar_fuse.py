@@ -32,6 +32,30 @@ def fuse_depth(bundle: CaptureBundle, voxel: float = VOXEL, max_depth: float = M
     return rec
 
 
+def fuse_depth_ablation(bundle: CaptureBundle, corrected: list[Frame], voxel: float = VOXEL,
+                        max_depth: float = MAX_DEPTH, min_conf: int = MIN_CONFIDENCE) -> tuple[Recon, Recon]:
+    """Drift ablation from one back-projection: (cloud with the capture's own poses, cloud with corrected poses).
+    `corrected` holds the same frames with corrected T_wc; each frame's world points are moved by its rigid
+    correction T_corr = T_wc' T_wc^-1, which equals back-projecting with the corrected pose, without reading
+    every depth map twice."""
+    pts, cols, moved = [], [], []
+    for f, g in zip(bundle.frames, corrected):
+        p, c = frame_points(f, PIX_STRIDE, max_depth, True, min_conf)
+        Tc = g.T_wc @ np.linalg.inv(f.T_wc)
+        pts.append(p.astype(np.float32))
+        cols.append(c.astype(np.float32))
+        moved.append((p @ Tc[:3, :3].T + Tc[:3, 3]).astype(np.float32))
+    C = np.concatenate(cols)
+    out = []
+    for P, frames in ((np.concatenate(pts), bundle.frames), (np.concatenate(moved), corrected)):
+        pcd = o3d.geometry.PointCloud(o3d.utility.Vector3dVector(P.astype(np.float64)))
+        pcd.colors = o3d.utility.Vector3dVector(C.astype(np.float64))
+        rec = _finish(pcd, bundle.up, frames, voxel, {"backend": "backproject", "voxel": voxel})
+        rec.meta.update({"backend": "depth-backproject", "min_confidence": min_conf, "max_depth": max_depth})
+        out.append(rec)
+    return out[0], out[1]
+
+
 def frame_points(f: Frame, pix_stride: int = 4, max_depth: float = 6.0, with_color: bool = False,
                  min_conf: int = MIN_CONFIDENCE):
     """One depth map -> world points (N,3) and optionally colours (N,3, RGB 0..1).

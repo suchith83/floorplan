@@ -33,8 +33,11 @@ def _timed(timings: dict, stage: str):
         timings[stage] = round(time.perf_counter() - t, 2)
 
 
-def reconstruct(bundle: CaptureBundle, work: Path, filter_frames: bool = True, backend: str = "local"):
-    """Bundle -> (bundle with depth, point cloud, frame-filter counts)."""
+def reconstruct(bundle: CaptureBundle, work: Path, filter_frames: bool = True, backend: str = "local",
+                drift_correction: bool = False):
+    """Bundle -> (bundle with depth, point cloud, frame-filter counts, drift info or None).
+    With drift correction (sensor depth only), the cloud is fused with corrected poses and the drift info holds
+    the correction result plus the cloud fused with the capture's own poses, for the on/off ablation."""
     from fp.ingest.quality import select_frames
     from fp.recon.lidar_fuse import fuse_depth
     stats = {}
@@ -45,13 +48,25 @@ def reconstruct(bundle: CaptureBundle, work: Path, filter_frames: bool = True, b
     if bundle.has_depth:
         if filter_frames:
             bundle.frames, stats = select_frames(bundle.frames)
-        return bundle, fuse_depth(bundle), stats
+        if not drift_correction:
+            return bundle, fuse_depth(bundle), stats, None
+        from fp.recon.drift import correct_drift, correct_poses
+        from fp.recon.lidar_fuse import fuse_depth_ablation
+        dres = correct_drift(bundle.frames, bundle.up)
+        rec_off, rec = fuse_depth_ablation(bundle, dres.frames)
+        if "_trajectory" in bundle.meta:
+            t, pos = bundle.meta["_trajectory"]
+            T = np.tile(np.eye(4), (len(t), 1, 1))
+            T[:, :3, 3] = pos
+            bundle.meta["_trajectory"] = (t, correct_poses(dres, t, T)[:, :3, 3])
+        bundle.frames = dres.frames
+        return bundle, rec, stats, {"result": dres, "rec_off": rec_off}
     if backend == "local":
         raise StageNotBuilt("recon", "Local MapAnything backend not built yet (work order 05); "
                                      "camera-only tiers need --backend modal for now.")
     from fp.recon.mapanything import predict_depth
     bundle = predict_depth(bundle, work / "depth")
-    return bundle, fuse_depth(bundle, max_depth=PREDICTED_MAX_DEPTH), stats
+    return bundle, fuse_depth(bundle, max_depth=PREDICTED_MAX_DEPTH), stats, None
 
 
 def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local", drift_correction: bool = True,
@@ -68,7 +83,8 @@ def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local",
     debug = out / "debug"
     debug.mkdir(parents=True, exist_ok=True)
     try:
-        legacy = _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_frames, warn)
+        legacy = _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_frames, warn,
+                           drift_correction)
         if damage and backend == "modal":
             with _timed(timings, "damage"):
                 _assess_damage(legacy, plan, out, wet_rooms, warn)
@@ -76,13 +92,9 @@ def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local",
             warn("damage", "Local damage backend not built yet (work order 06); damage not assessed.")
     except StageError as e:
         warn(e.stage, str(e))
-    if not plan["rooms"]:
-        plan["drift"]["method"] = "not run: no poses reached the geometry stage"
-    elif not drift_correction:
-        plan["drift"]["method"] = "disabled (--no-drift-correction): poses used as-is"
-    else:
-        plan["drift"]["method"] = "not built yet (work order 03): poses used as-is"
-        warn("drift", "Drift correction not built yet (work order 03); poses used as-is.")
+    if plan["drift"]["method"] == "none":     # _geometry fills it when poses reached the geometry stage
+        plan["drift"]["method"] = ("disabled (--no-drift-correction): poses used as-is" if not drift_correction
+                                   else "not run: no poses reached the geometry stage")
     if not plan["rooms"]:
         warn("rooms", "No rooms reconstructed.")
     warn("intervals", "Intervals are provisional (fp/contract.py), not yet calibrated on ground truth (work order 07).")
@@ -111,7 +123,8 @@ def _validated(plan: dict | Path) -> dict:
         raise SystemExit("plan.json does not match schema 1.0:\n" + "\n".join(lines))
 
 
-def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_frames, warn) -> dict:
+def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_frames, warn,
+              drift_correction: bool = True) -> dict:
     """Ingest -> recon -> align -> rooms, filling `plan` in place. Returns the internal (pre-schema) result
     that the damage step still works on."""
     from fp.geometry.align import CEILING_MIN_AREA, FloorNotFound, align, to_plan
@@ -123,7 +136,8 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
     for msg in bundle.meta.get("_warnings", []):
         warn("ingest", msg)
     with _timed(timings, "recon"):
-        bundle, rec, fstats = reconstruct(bundle, out, filter_frames, backend)
+        bundle, rec, fstats, drift = reconstruct(bundle, out, filter_frames, backend,
+                                                 drift_correction and tier == "lidar")
     plan["source"].update(n_frames=len(bundle.frames), frame_filter=fstats,
                           **{k: v for k, v in bundle.meta.items() if not k.startswith("_")})
     with _timed(timings, "align"):
@@ -168,7 +182,52 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
     plan["source"].update(gravity=al["up_source"], yaw_deg=al["yaw_deg"], camera_h_m=round(al["camera_h"], 2))
     bev_png(out / "debug" / "bev.png", P, N, plan, al["ceiling_h"])
     _fusion_debug(out / "debug", P, N, rec, bundle, T, plan, al["ceiling_h"], wall_lines)
+    with _timed(timings, "drift_metrics"):
+        _drift_report(out / "debug", plan, P, N, cams, al["ceiling_h"], rec, drift, drift_correction, tier, warn)
     return {"bundle": bundle, "rooms": rooms, "connections": conns, "T_plan_world": T.round(6).tolist()}
+
+
+def _drift_report(debug, plan, P, N, cams, ceiling_h, rec, drift, enabled, tier, warn):
+    """plan["drift"]: what ran and the on/off numbers; debug/drift_ablation.png (off | on, double walls in red).
+    Metrics: median wall thickness, double walls (same surface seen twice, 4-20 cm apart), loop-closure
+    residuals before/after, stitched footprint (rooms and summed room area, each run split on its own cloud)."""
+    from fp.geometry.align import align, to_plan
+    from fp.geometry.plan import RES, _footprint
+    from fp.recon.drift import wall_quality
+    from fp.report.debug import drift_ablation_png
+    vox = rec.meta.get("voxel", 0.01)
+    area = lambda P_, N_, c_: float(_footprint(P_, N_, ceiling_h, None, c_)[0].sum() * RES * RES)  # no rooms: raw footprint
+    q_on = wall_quality(P, N, vox)
+    if drift is None:
+        method = ("disabled (--no-drift-correction): poses used as-is" if tier == "lidar" else
+                  "not applicable: poses come from the reconstruction itself (camera tiers)")
+        plan["drift"] = {"method": method, "enabled": False, "metrics": {
+            "thickness_median_cm": q_on["thickness_median_cm"], "double_walls": len(q_on["double_walls"]),
+            "footprint_m2": round(area(P, N, cams), 2)}}
+        return
+    res, off = drift["result"], drift["rec_off"]
+    al = align(off)
+    To = al["T_plan_world"]
+    Po, No = to_plan(To, off.points), off.normals @ To[:3, :3].T
+    traj_off = np.array([f.T_wc[:3, 3] for f in off.frames])
+    q_off = wall_quality(Po, No, vox)
+    from fp.geometry.plan import extract_rooms
+    rooms_off, _, _ = extract_rooms(Po, No, al["ceiling_h"], vox, 1.0, _plan_rays(off, To), to_plan(To, traj_off))
+    m = {k: v for k, v in res.metrics.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+    m.update({"thickness_median_cm_off": q_off["thickness_median_cm"], "thickness_median_cm_on": q_on["thickness_median_cm"],
+              "double_walls_off": len(q_off["double_walls"]), "double_walls_on": len(q_on["double_walls"]),
+              "rooms_off": len(rooms_off), "rooms_on": len(plan["rooms"]),
+              "footprint_m2_off": round(sum(r["area_m2"] for r in rooms_off), 2),
+              "footprint_m2_on": round(sum(r["floor_area"]["value"] for r in plan["rooms"]), 2)})
+    plan["drift"] = {"method": res.method, "enabled": True, "metrics": m}
+    fmt = lambda q, fa, n: [f"median wall thickness {q['thickness_median_cm']:.2f} cm",
+                            f"double walls (red): {len(q['double_walls'])}", f"{n} rooms, footprint {fa:.1f} m2"]
+    drift_ablation_png(debug / "drift_ablation.png", [
+        {"title": "drift correction OFF (ARKit poses as-is)", "lines": fmt(q_off, m["footprint_m2_off"], len(rooms_off)),
+         "P": Po, "N": No, "double_walls": q_off["double_walls"], "rooms": rooms_off},
+        {"title": "drift correction ON", "lines": fmt(q_on, m["footprint_m2_on"], len(plan["rooms"])) + [
+            f"loop RMSE {m.get('loop_rmse_before_cm', float('nan')):.2f} -> {m.get('loop_rmse_after_cm', float('nan')):.2f} cm"],
+         "P": P, "N": N, "double_walls": q_on["double_walls"], "rooms": plan["rooms"]}])
 
 
 def _plan_rays(rec, T):

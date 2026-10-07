@@ -87,3 +87,41 @@ def wall_slice_png(path, P, N, line, ceiling_h=None, res=0.005, half_depth=0.15,
     cv2.putText(img, label, (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 200), 1)
     cv2.putText(img, "x6 horizontal; ticks 5 cm", (5, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 200), 1)
     cv2.imwrite(str(path), img)
+
+
+def drift_ablation_png(path, panels, res=0.01):
+    """debug/drift_ablation.png: side-by-side top-down views of the wall band (0.3-2.1 m, vertical surfaces),
+    one panel per run (drift correction off | on), with that run's stitched room polygons in blue. A sharp wall is a thin dark line; a wall seen twice by
+    drifted poses shows as two lines. Double walls found by fp.recon.drift.wall_quality are drawn in red.
+    panels: [{"title": str, "lines": [str], "P": (n,3), "N": (n,3), "double_walls": [{axis, coord_a, coord_b, lo, hi}]}]"""
+    imgs = []
+    allP = np.vstack([p["P"][:, :2] for p in panels])
+    for p in panels:
+        img, px = _canvas(allP, res)
+        P, N = p["P"], p["N"]
+        m = (np.abs(N[:, 2]) < 0.2) & (P[:, 2] > 0.3) & (P[:, 2] < 2.1)
+        q = px(P[m])
+        h, w = img.shape[:2]
+        ok = (q[:, 0] >= 0) & (q[:, 0] < w) & (q[:, 1] >= 0) & (q[:, 1] < h)
+        cnt = np.zeros((h, w), np.int32)
+        np.add.at(cnt, (q[ok, 1], q[ok, 0]), 1)
+        shade = np.clip(255 - 25 * cnt, 40, 255).astype(np.uint8)   # more wall points per cell -> darker
+        img[:] = shade[..., None]
+        for d in p.get("double_walls", []):
+            for c in (d["coord_a"], d["coord_b"]):
+                a = np.array([c, d["lo"]] if d["axis"] in (0, "x") else [d["lo"], c])
+                b = np.array([c, d["hi"]] if d["axis"] in (0, "x") else [d["hi"], c])
+                cv2.line(img, tuple(map(int, px(a))), tuple(map(int, px(b))), (0, 0, 230), 3)
+        for r in p.get("rooms", []):          # the stitched footprint of this run
+            poly = px(np.array(r["polygon"]))
+            cv2.polylines(img, [poly.reshape(-1, 1, 2)], True, (220, 120, 0), 2)
+        for k, t in enumerate([p["title"]] + list(p.get("lines", []))):
+            cv2.putText(img, t, (20, 40 + 32 * k), cv2.FONT_HERSHEY_SIMPLEX, 0.9 if k == 0 else 0.7, (0, 0, 0), 2)
+        cv2.line(img, (20, h - 20), (20 + int(1 / res), h - 20), (0, 0, 0), 3)
+        cv2.putText(img, "1 m", (20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1)
+        imgs.append(img)
+    sep = np.full((imgs[0].shape[0], 12, 3), 255, np.uint8)
+    out = imgs[0]
+    for im in imgs[1:]:
+        out = np.hstack([out, sep, im])
+    cv2.imwrite(str(path), out)
