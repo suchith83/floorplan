@@ -14,6 +14,7 @@ dependencies = [
   "pillow",
   "modal",
   "huggingface_hub",
+  "pydantic>=2.12,<3",
 ]
 
 [project.scripts]

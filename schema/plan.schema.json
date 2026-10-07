@@ -1,0 +1,783 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:floorplan:plan:1.0",
+  "title": "Floorplan plan.json (schema 1.0)",
+  "$defs": {
+    "BBox": {
+      "additionalProperties": false,
+      "description": "Box on a surface. Walls: u = metres along the wall from p0, v = metres above the floor.\nFloor/ceiling: u, v = plan x, y.",
+      "properties": {
+        "u0": {
+          "title": "U0",
+          "type": "number"
+        },
+        "v0": {
+          "title": "V0",
+          "type": "number"
+        },
+        "u1": {
+          "title": "U1",
+          "type": "number"
+        },
+        "v1": {
+          "title": "V1",
+          "type": "number"
+        }
+      },
+      "required": [
+        "u0",
+        "v0",
+        "u1",
+        "v1"
+      ],
+      "title": "BBox",
+      "type": "object"
+    },
+    "ConcealedFlag": {
+      "additionalProperties": false,
+      "description": "A rule-based hypothesis about damage that cannot be seen (never a finding).",
+      "properties": {
+        "id": {
+          "pattern": "^C[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "damage_id": {
+          "anyOf": [
+            {
+              "pattern": "^D[1-9][0-9]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Damage Id"
+        },
+        "rule_id": {
+          "title": "Rule Id",
+          "type": "string"
+        },
+        "rule_text": {
+          "title": "Rule Text",
+          "type": "string"
+        },
+        "evidence": {
+          "title": "Evidence",
+          "type": "string"
+        },
+        "label": {
+          "const": "hypothesis",
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "damage_id",
+        "rule_id",
+        "rule_text",
+        "evidence",
+        "label"
+      ],
+      "title": "ConcealedFlag",
+      "type": "object"
+    },
+    "Connection": {
+      "additionalProperties": false,
+      "description": "Two rooms are adjacent. opening_id null = adjacency without a detected opening.",
+      "properties": {
+        "rooms": {
+          "description": "two room ids",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Rooms",
+          "type": "array"
+        },
+        "opening_id": {
+          "anyOf": [
+            {
+              "pattern": "^R[1-9][0-9]*\\.O[1-9][0-9]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Opening Id"
+        }
+      },
+      "required": [
+        "rooms",
+        "opening_id"
+      ],
+      "title": "Connection",
+      "type": "object"
+    },
+    "Damage": {
+      "additionalProperties": false,
+      "description": "A detected damage region on one surface. JSON key \"class\" (Python attribute class_).",
+      "properties": {
+        "id": {
+          "pattern": "^D[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "class": {
+          "title": "Class",
+          "type": "string"
+        },
+        "surface_id": {
+          "title": "Surface Id",
+          "type": "string"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "description": "[x, y, z] in metres",
+              "items": {
+                "type": "number"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Position"
+        },
+        "extent_m2": {
+          "$ref": "#/$defs/Measure"
+        },
+        "bbox_on_surface": {
+          "$ref": "#/$defs/BBox"
+        },
+        "evidence_image": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "path relative to the plan.json's folder",
+          "title": "Evidence Image"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "class",
+        "surface_id",
+        "position",
+        "extent_m2",
+        "bbox_on_surface",
+        "evidence_image",
+        "score"
+      ],
+      "title": "Damage",
+      "type": "object"
+    },
+    "Drift": {
+      "additionalProperties": false,
+      "description": "Drift correction (loop closure etc.): what ran and its numbers.",
+      "properties": {
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "metrics": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Metrics",
+          "type": "object"
+        }
+      },
+      "required": [
+        "method",
+        "enabled",
+        "metrics"
+      ],
+      "title": "Drift",
+      "type": "object"
+    },
+    "Frame": {
+      "additionalProperties": false,
+      "description": "The plan frame: z up, floor at floor_z, metres. T_plan_world maps world → plan (4×4).",
+      "properties": {
+        "up": {
+          "const": "z",
+          "title": "Up",
+          "type": "string"
+        },
+        "floor_z": {
+          "title": "Floor Z",
+          "type": "number"
+        },
+        "units": {
+          "const": "m",
+          "title": "Units",
+          "type": "string"
+        },
+        "T_plan_world": {
+          "anyOf": [
+            {
+              "items": {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 4,
+                "minItems": 4,
+                "type": "array"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "T Plan World"
+        }
+      },
+      "required": [
+        "up",
+        "floor_z",
+        "units",
+        "T_plan_world"
+      ],
+      "title": "Frame",
+      "type": "object"
+    },
+    "Intervals": {
+      "additionalProperties": false,
+      "description": "How the intervals were made. scale = interval multiplier vs LiDAR (report badge \"intervals ×N\").",
+      "properties": {
+        "level": {
+          "description": "nominal coverage of every [lo, hi], e.g. 0.9",
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Level",
+          "type": "number"
+        },
+        "scale": {
+          "exclusiveMinimum": 0,
+          "title": "Scale",
+          "type": "number"
+        },
+        "calibrated": {
+          "title": "Calibrated",
+          "type": "boolean"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "scale",
+        "calibrated",
+        "method"
+      ],
+      "title": "Intervals",
+      "type": "object"
+    },
+    "Measure": {
+      "additionalProperties": false,
+      "description": "A number with a stated 90% interval [lo, hi]. value null = not measured (observed false).",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        },
+        "lo": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Lo"
+        },
+        "hi": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hi"
+        },
+        "unit": {
+          "enum": [
+            "m",
+            "m2",
+            "count"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "observed": {
+          "title": "Observed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "value",
+        "lo",
+        "hi",
+        "unit",
+        "method",
+        "observed"
+      ],
+      "title": "Measure",
+      "type": "object"
+    },
+    "Opening": {
+      "additionalProperties": false,
+      "description": "A door, window or passage, listed once under the room that owns wall_id.",
+      "properties": {
+        "id": {
+          "pattern": "^R[1-9][0-9]*\\.O[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "door",
+            "window",
+            "passage"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "wall_id": {
+          "pattern": "^R[1-9][0-9]*\\.W[1-9][0-9]*$",
+          "title": "Wall Id",
+          "type": "string"
+        },
+        "rooms": {
+          "anyOf": [
+            {
+              "description": "two room ids",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "the two rooms it connects; null for windows/exterior doors",
+          "title": "Rooms"
+        },
+        "width": {
+          "$ref": "#/$defs/Measure"
+        },
+        "height": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Measure"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Measure"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "center": {
+          "description": "[x, y] in metres",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Center",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "wall_id",
+        "rooms",
+        "width",
+        "height",
+        "sill",
+        "center"
+      ],
+      "title": "Opening",
+      "type": "object"
+    },
+    "PlanWarning": {
+      "additionalProperties": false,
+      "description": "Something a stage wants the reader to know (e.g. a stage not built yet, a ceiling not seen).",
+      "properties": {
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "message"
+      ],
+      "title": "Warning",
+      "type": "object"
+    },
+    "Room": {
+      "additionalProperties": false,
+      "description": "One room. polygon: counter-clockwise, not closed (last point != first).",
+      "properties": {
+        "id": {
+          "pattern": "^R[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "polygon": {
+          "items": {
+            "description": "[x, y] in metres",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "minItems": 3,
+          "title": "Polygon",
+          "type": "array"
+        },
+        "floor_area": {
+          "$ref": "#/$defs/Measure"
+        },
+        "ceiling_height": {
+          "$ref": "#/$defs/Measure"
+        },
+        "perimeter": {
+          "$ref": "#/$defs/Measure"
+        },
+        "walls": {
+          "items": {
+            "$ref": "#/$defs/Wall"
+          },
+          "title": "Walls",
+          "type": "array"
+        },
+        "openings": {
+          "items": {
+            "$ref": "#/$defs/Opening"
+          },
+          "title": "Openings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "polygon",
+        "floor_area",
+        "ceiling_height",
+        "perimeter",
+        "walls",
+        "openings"
+      ],
+      "title": "Room",
+      "type": "object"
+    },
+    "ScopeItem": {
+      "additionalProperties": false,
+      "description": "A repair line item on one surface. unit must equal quantity.unit.",
+      "properties": {
+        "id": {
+          "pattern": "^S[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "surface_id": {
+          "title": "Surface Id",
+          "type": "string"
+        },
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "quantity": {
+          "$ref": "#/$defs/Measure"
+        },
+        "unit": {
+          "enum": [
+            "m",
+            "m2",
+            "count"
+          ],
+          "title": "Unit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "surface_id",
+        "action",
+        "quantity",
+        "unit"
+      ],
+      "title": "ScopeItem",
+      "type": "object"
+    },
+    "Wall": {
+      "additionalProperties": false,
+      "description": "A wall segment p0→p1 of a room. coverage = fraction of the wall seen in the capture.",
+      "properties": {
+        "id": {
+          "pattern": "^R[1-9][0-9]*\\.W[1-9][0-9]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "p0": {
+          "description": "[x, y] in metres",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "P0",
+          "type": "array"
+        },
+        "p1": {
+          "description": "[x, y] in metres",
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "P1",
+          "type": "array"
+        },
+        "length": {
+          "$ref": "#/$defs/Measure"
+        },
+        "observed": {
+          "title": "Observed",
+          "type": "boolean"
+        },
+        "coverage": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Coverage",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "p0",
+        "p1",
+        "length",
+        "observed",
+        "coverage"
+      ],
+      "title": "Wall",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One capture's whole-property plan (the root of plan.json).",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "tier": {
+      "enum": [
+        "lidar",
+        "video",
+        "photos"
+      ],
+      "title": "Tier",
+      "type": "string"
+    },
+    "capture_id": {
+      "title": "Capture Id",
+      "type": "string"
+    },
+    "device": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Device"
+    },
+    "frame": {
+      "$ref": "#/$defs/Frame"
+    },
+    "intervals": {
+      "$ref": "#/$defs/Intervals"
+    },
+    "source": {
+      "additionalProperties": true,
+      "description": "free-form provenance: path, n_frames, filter stats",
+      "title": "Source",
+      "type": "object"
+    },
+    "rooms": {
+      "items": {
+        "$ref": "#/$defs/Room"
+      },
+      "title": "Rooms",
+      "type": "array"
+    },
+    "connections": {
+      "items": {
+        "$ref": "#/$defs/Connection"
+      },
+      "title": "Connections",
+      "type": "array"
+    },
+    "footprint_area": {
+      "$ref": "#/$defs/Measure"
+    },
+    "drift": {
+      "$ref": "#/$defs/Drift"
+    },
+    "damage": {
+      "items": {
+        "$ref": "#/$defs/Damage"
+      },
+      "title": "Damage",
+      "type": "array"
+    },
+    "concealed": {
+      "items": {
+        "$ref": "#/$defs/ConcealedFlag"
+      },
+      "title": "Concealed",
+      "type": "array"
+    },
+    "scope": {
+      "items": {
+        "$ref": "#/$defs/ScopeItem"
+      },
+      "title": "Scope",
+      "type": "array"
+    },
+    "timings": {
+      "additionalProperties": {
+        "type": "number"
+      },
+      "description": "seconds per stage, plus \"total\"",
+      "title": "Timings",
+      "type": "object"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/PlanWarning"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "debug": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "free-form, not part of the contract",
+      "title": "Debug"
+    }
+  },
+  "required": [
+    "schema_version",
+    "tier",
+    "capture_id",
+    "device",
+    "frame",
+    "intervals",
+    "source",
+    "rooms",
+    "connections",
+    "footprint_area",
+    "drift",
+    "damage",
+    "concealed",
+    "scope",
+    "timings",
+    "warnings"
+  ],
+  "type": "object"
+}

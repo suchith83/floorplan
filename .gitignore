@@ -12,3 +12,6 @@ __pycache__/
 .env
 # Private planning notes for the build sessions (not part of the submission)
 planning/
+data/
+# Claude Code agent worktrees
+.claude/worktrees/
