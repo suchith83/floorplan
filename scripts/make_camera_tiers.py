@@ -7,7 +7,8 @@ Why: the brief compares tiers on the same rooms. The sample captures are LiDAR-o
 photo tiers are cut from the same `rgb.mp4`; the LiDAR plan is the *reference* that tells us which room
 each frame was taken in. For every capture <id> this writes (and overwrites) <out>/<id>/:
 
-    video/<id>.mp4                the capture's rgb.mp4 alone (byte copy; no depth, no poses)
+    video/<id>.mp4                the capture's rgb.mp4 alone (stream copy, no depth or poses) plus the
+                                  display-rotation tag an iPhone .MOV carries (see "Upright video")
     photos/<room id>/fNNNNNN.jpg  2-8 full-resolution upright stills per room (JPEG q95), NNNNNN =
                                   video frame index = odometry.csv row
     selection.json                every still (frame, timestamp, rooms, why, sharpness, camera pose in
@@ -39,7 +40,13 @@ How stills are chosen (same constants for every capture, no per-capture tuning):
 
 Upright stills: each still is rotated by k*90 deg so that world up points closest to image up (what a
 phone camera app does with its accelerometer); a portrait-held frame becomes 1440x1920. The rotation is
-recorded as `rotated_deg` (clockwise) in selection.json. video/<id>.mp4 is left untouched.
+recorded as `rotated_deg` (clockwise) in selection.json.
+
+Upright video: Stray stores rgb.mp4 in the sensor's landscape frame with NO rotation tag, so a portrait-held
+capture plays sideways. An iPhone camera app records the same pixels but tags the file with a display
+rotation, fixed when recording starts. To give the video tier what a phone would, the derived video gets
+one tag: the most common upright rotation over all frames (same rule as the stills), written with
+ffmpeg `-display_rotation` and `-c copy` (pixels untouched). Recorded as `video_rotated_deg`.
 
 Decoding: rgb.mp4 is read front to back twice (HEVC seeks are slow): once to score sharpness of the
 sampled frames, once to write the chosen stills. The output is deterministic (no wall-clock data).
@@ -117,6 +124,17 @@ def upright_rotation(R_wc: np.ndarray) -> int:
     ux, uy = R_wc[1, 0], R_wc[1, 1]            # row 1 of R_wc = R_wc^T @ (0, 1, 0)
     score = {0: -uy, 90: -ux, 180: uy, 270: ux}
     return max(score, key=lambda k: (round(float(score[k]), 9), -k))
+
+
+def tag_rotation(src: Path, dst: Path, clockwise_deg: int) -> None:
+    """Copy the video stream unchanged and tag it to be shown rotated `clockwise_deg` (ffmpeg's
+    -display_rotation is counter-clockwise, hence the minus). bitexact: no version string, so reruns match."""
+    import subprocess
+
+    import imageio_ffmpeg
+    cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-v", "error", "-display_rotation:v:0", str(-clockwise_deg),
+           "-i", str(src), "-map", "0:v:0", "-c", "copy", "-fflags", "+bitexact", str(dst)]
+    subprocess.run(cmd, check=True)
 
 
 def write_stills(video: Path, targets: dict[int, list[Path]], rot: dict[int, int]) -> None:
@@ -266,8 +284,10 @@ def process(capture: Path, out_root: Path) -> dict:
     if out.exists():
         shutil.rmtree(out)
     (out / "video").mkdir(parents=True)
-    shutil.copyfile(capture / "rgb.mp4", out / "video" / f"{cid}.mp4")
-    rot = {i: upright_rotation(od["T_wc"][i, :3, :3]) for i in reasons}
+    all_rot = [upright_rotation(od["T_wc"][i, :3, :3]) for i in range(n)]
+    video_rot = max((0, 90, 180, 270), key=lambda k: (all_rot.count(k), -k))
+    tag_rotation(capture / "rgb.mp4", out / "video" / f"{cid}.mp4", video_rot)
+    rot = {i: all_rot[i] for i in reasons}
     targets = {i: [out / "photos" / rid / f"f{i:06d}.jpg" for rid in e["rooms"]] for i, e in sorted(reasons.items())}
     if targets:
         write_stills(capture / "rgb.mp4", targets, rot)
@@ -293,6 +313,7 @@ def process(capture: Path, out_root: Path) -> dict:
     sel = {"capture": cid, "source": str(capture), "reference_plan": f"out/{cid}-lidar-ref/plan.json",
            "T_plan_world": P.round(6).tolist(),
            "constants": {k: v for k, v in globals().items() if k.isupper() and isinstance(v, (int, float, tuple))},
+           "video_rotated_deg": video_rot,
            "odometry_rows": n, "sampled_frames": len(range(0, n, CANDIDATE_STEP)),
            "sampled_in_rooms": len(room_of), "level_in_rooms": len(level), "candidates": len(cands),
            "median_sharpness": round(med, 1), "rooms": room_out, "connections": conn_out,
