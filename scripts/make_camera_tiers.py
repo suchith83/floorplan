@@ -31,10 +31,14 @@ How stills are chosen (same constants for every capture, no per-capture tuning):
     squarely at c. It is written once and copied byte-for-byte into both rooms' folders, as in the
     capture protocol ("in every doorway take 1 photo looking into the next room and save it in both
     rooms' folders"); the photo loader dedupes identical photos and uses them to link rooms.
- 5. Room photos: fill each room up to PER_ROOM_MAX stills (at least PER_ROOM_MIN) by greedy
-    farthest-point selection over (camera x, y, yaw), seeded by that room's doorway stills (or, if none,
-    by its sharpest candidate), so the shots come from different spots and look in different
-    directions ("stand in each corner and shoot across the room"). Rooms with fewer than PER_ROOM_MIN
+ 5. Room photos: overlapping sweeps ("stand in one spot and take a photo every quarter of a view while
+    turning, so each photo shares about half of the previous one"). From a standing spot (the room's
+    doorway still, or its sharpest candidate) a pan grows outwards: each next photo within SPOT_RADIUS of
+    the spot, turned SWEEP_STEP_DEG +- SWEEP_TOL_DEG past either end of the pan. If photos remain (up to
+    PER_ROOM_MAX in all, doorway stills included), a second sweep starts at the candidate farthest from
+    every photo so far. Why: a multi-view model registers photos through what they share. The first
+    version picked photos by farthest-point over (x, y, yaw), i.e. as different as possible; MapAnything
+    then got relative rotations wrong by a median 35-45 deg (STATUS 05). Rooms with fewer than PER_ROOM_MIN
     candidates (seen only through a door) get no photos and are listed as "not photographed";
     connections touching them get no doorway still.
 
@@ -77,7 +81,11 @@ SHARPNESS_FRACTION = 0.5     # keep frames at least half as sharp as the capture
 MAX_PITCH_DEG = 35.0         # roughly level photos; steeper ones show mostly floor or ceiling
 PER_ROOM_MIN = 2             # the photo protocol asks for 2-8 photos per room
 PER_ROOM_MAX = 8
-YAW_WEIGHT_M_PER_RAD = 1.0   # diversity metric: 1 rad (57 deg) of heading counts like 1 m of position
+SWEEP_STEP_DEG = 25.0        # pan step between photos of one sweep: an upright still sees ~48 deg across
+                             # (2 atan(720 / 1598 px)), so a 25 deg step keeps ~half the view in common
+SWEEP_TOL_DEG = 10.0         # accept 15-35 deg steps (the walker's video has no frame at exactly 25)
+SPOT_RADIUS = 1.0            # m: photos of one sweep are taken within 1 m of the standing spot
+MAX_SPOTS = 2                # per room: one sweep, plus a second from the farthest spot if photos remain
 DOOR_RADIUS = 1.0            # a doorway photo is taken within 1 m of the opening centre ...
 DOOR_MIN_DIST = 0.3          # ... but not inside the opening itself (heading to the centre is unstable)
 DOOR_MAX_ANGLE_DEG = 45.0    # the opening centre must be in front of the camera
@@ -174,25 +182,32 @@ def write_stills(video: Path, targets: dict[int, list[Path]], rot: dict[int, int
     cap.release()
 
 
-def farthest_points(feat: np.ndarray, seeds: list[int], k: int) -> list[int]:
-    """Greedy farthest-point selection on rows of feat = (x, y, yaw); seeds are already chosen rows."""
-    chosen = list(seeds)
-    if not len(feat):
-        return chosen
-
-    def dist(j):
-        dp = np.hypot(feat[:, 0] - feat[j, 0], feat[:, 1] - feat[j, 1])
-        return np.hypot(dp, YAW_WEIGHT_M_PER_RAD * _angdiff(feat[:, 2], feat[j, 2]))
-
-    dmin = np.full(len(feat), np.inf)
-    for j in chosen:
-        dmin = np.minimum(dmin, dist(j))
-    while len(chosen) < min(k, len(feat)):
-        dmin[chosen] = -1.0
-        j = int(np.argmax(dmin))                 # argmax takes the first (lowest index) on ties
-        chosen.append(j)
-        dmin = np.minimum(dmin, dist(j))
-    return chosen
+def sweep(feat: np.ndarray, seed: int, k: int, taken: set[int]) -> list[int]:
+    """A pan from the standing spot feat[seed, :2]: grow a chain of rows of feat = (x, y, yaw) outwards from
+    the seed, each new photo within SPOT_RADIUS of the spot and turned SWEEP_STEP_DEG +- SWEEP_TOL_DEG past
+    the current end of the chain (left or right, whichever end has the closer match). Returns up to k rows
+    (seed first), never rows in `taken`."""
+    spot = feat[seed, :2]
+    near = np.hypot(*(feat[:, :2] - spot).T) <= SPOT_RADIUS
+    step, tol = np.radians(SWEEP_STEP_DEG), np.radians(SWEEP_TOL_DEG)
+    chain = [seed]
+    ends = {+1: feat[seed, 2], -1: feat[seed, 2]}   # yaw of the left / right end
+    while len(chain) < k:
+        best = None
+        for sign, y in ends.items():
+            turn = ((feat[:, 2] - y) * sign) % (2 * np.pi)          # how far past this end, in its direction
+            ok = near & (np.abs(turn - step) <= tol)
+            ok[list(taken) + chain] = False
+            for j in np.flatnonzero(ok):
+                key = (abs(turn[j] - step), float(np.hypot(*(feat[j, :2] - spot))), int(j))
+                if best is None or key < best[0]:
+                    best = (key, int(j), sign)
+        if best is None:
+            break
+        _, j, sign = best
+        chain.append(j)
+        ends[sign] = feat[j, 2]
+    return chain
 
 
 def connection_centre(plan: dict, conn: dict, polys: dict[str, Polygon]) -> tuple[list[float], str]:
@@ -285,15 +300,23 @@ def process(capture: Path, out_root: Path) -> dict:
         cl = by_room[rid]
         feat = np.stack([pos[cl, 0], pos[cl, 1], yaw[cl]], 1)
         door_here = [k for k, i in enumerate(cl) if i in reasons and rid in reasons[i]["rooms"]]
-        # doorway stills taken from the other room still count as already-chosen views of this room
+        # doorway stills taken from the other room still count as photos of this room
         n_door_total = sum(1 for e in reasons.values() if rid in e["rooms"])
-        seeds = door_here or [int(np.argmax([sharp[i] for i in cl]))]
         budget = max(PER_ROOM_MIN, PER_ROOM_MAX - (n_door_total - len(door_here)))
-        picked = farthest_points(feat, seeds, budget)
-        if not door_here:
-            add(cl[seeds[0]], rid, "room")
-        for k in picked[len(seeds):]:
-            add(cl[k], rid, "room")
+        taken: set[int] = set(door_here)
+        seed = door_here[0] if door_here else int(np.argmax([sharp[i] for i in cl]))
+        for spot in range(MAX_SPOTS):
+            chain = sweep(feat, seed, budget - len(taken - {seed}), taken - {seed})   # total stays <= budget
+            for k in chain:
+                if k not in door_here:
+                    add(cl[k], rid, "sweep" if spot == 0 else "sweep 2")
+            taken |= set(chain)
+            rest = [k for k in range(len(cl)) if k not in taken]
+            if len(taken) >= budget or not rest:
+                break
+            # next spot: the candidate farthest from every photo so far (covers the other end of the room)
+            d = [min(np.hypot(*(feat[k, :2] - feat[t, :2])) for t in taken) for k in rest]
+            seed = rest[int(np.argmax(d))]
 
     out = out_root / cid
     if out.exists():
