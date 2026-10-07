@@ -135,8 +135,9 @@ def fit_one(rows: list[dict], tier: str, typ: str) -> dict | None:
     scores = [needed(r, param, k=p["k"], b=p["b"]) for r in rows]
     q, small = quantile(scores)
     out = dict(p)
-    out[param] = round(max(q, p[param]), 4)     # never narrower than provisional without tape
-    out.update(fitted=True, n=len(rows), small_n=small, raw=round(q, 4), floored=q < p[param])
+    # never narrower than provisional without tape; rounded UP so the row that sets the bound stays covered
+    out[param] = math.ceil(float(max(q, p[param])) * 1e4 - 1e-9) / 1e4
+    out.update(fitted=True, n=len(rows), small_n=bool(small), raw=round(float(q), 4), floored=bool(q < p[param]))
     return out
 
 

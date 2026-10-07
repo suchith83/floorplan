@@ -1,0 +1,23 @@
+# Openings that really exist in c7d28f72c6, judged BY EYE from RGB frames (work order 04 verifier, 7 Oct;
+# debug/openings/<id>_frames.jpg and walls_<room>.jpg). This is detection truth only: there is no tape on
+# the sample data, so widths cannot be scored. Centres are in the LiDAR plan frame of out/c7d28f72c6/plan.json
+# (metres); for a missed opening the centre is its wall's midpoint. eval/run_benchmark.py matches a plan
+# opening to a label when it lies within MATCH_M of the centre; the kind must agree, else it counts as a miss.
+# In-sample caveat: 04's rules were written while looking at this capture.
+capture: c7d28f72c6
+source: "work order 04 verifier, by eye; see docs/STATUS.md section 04"
+openings:
+  - {name: "hall to R8 door",            kind: door,    center: [1.66, -3.76]}
+  - {name: "hall to R9 door",            kind: door,    center: [5.28, -4.23]}
+  - {name: "R2 to hall passage",         kind: passage, center: [2.12, -5.36]}
+  - {name: "R2 closed door",             kind: door,    center: [3.16, -7.42]}
+  - {name: "R3 to R9 passage",           kind: passage, center: [6.07, -2.69]}
+  - {name: "R7 to R8 door",              kind: door,    center: [1.08, -3.25]}
+  - {name: "R9 to R5 door",              kind: door,    center: [6.44, -4.36]}
+  - {name: "glazed balcony slider (R4)", kind: door,    center: [0.34, 1.10]}
+  - {name: "office door (R8 to R4)",     kind: door,    center: [1.08, -1.28]}
+  - {name: "R5 tall narrow window, sill 0.15 m", kind: window, center: [8.86, -4.92], missed_in_04: true}
+  - {name: "R1 curtained window",        kind: window,  center: [3.85, -0.57], missed_in_04: true}
+  - {name: "R3 curtained window",        kind: window,  center: [7.48, -0.04], missed_in_04: true}
+  - {name: "R2 closed door seen only above 1.35 m", kind: door, center: [2.63, -9.17], missed_in_04: true}
+# Not openings (a plan opening here is a phantom): the vanity mirror in R5 near (8.30, -3.76).
