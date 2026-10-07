@@ -115,11 +115,14 @@ def drift_ablation_png(path, panels, res=0.01):
         for r in p.get("rooms", []):          # the stitched footprint of this run
             poly = px(np.array(r["polygon"]))
             cv2.polylines(img, [poly.reshape(-1, 1, 2)], True, (220, 120, 0), 2)
-        for k, t in enumerate([p["title"]] + list(p.get("lines", []))):
-            cv2.putText(img, t, (20, 40 + 32 * k), cv2.FONT_HERSHEY_SIMPLEX, 0.9 if k == 0 else 0.7, (0, 0, 0), 2)
         cv2.line(img, (20, h - 20), (20 + int(1 / res), h - 20), (0, 0, 0), 3)
         cv2.putText(img, "1 m", (20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1)
-        imgs.append(img)
+        text = [p["title"]] + list(p.get("lines", []))
+        n_text = 1 + max(len(q.get("lines", [])) for q in panels)    # same band height: plans stay level
+        head = np.full((30 + 32 * n_text, w, 3), 255, np.uint8)      # text in its own band, never over the plan
+        for k, t in enumerate(text):
+            cv2.putText(head, t, (20, 40 + 32 * k), cv2.FONT_HERSHEY_SIMPLEX, 0.9 if k == 0 else 0.7, (0, 0, 0), 2)
+        imgs.append(np.vstack([head, img]))
     sep = np.full((imgs[0].shape[0], 12, 3), 255, np.uint8)
     out = imgs[0]
     for im in imgs[1:]:
