@@ -114,34 +114,43 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
 - `plan["source"]` now carries `room_occupancy_s` and `wall_thickness_cm`; the camera path is in
   `bundle.meta["_trajectory"]` (all frames, before the filter).
 - c7d28f72c6 (with ceiling) not run in this work order.
-## 03 — Drift accountability and the stitched whole-property plan (LiDAR): **in progress (checkpoint 7 Oct ~22:00 IST)**
-**Done (committed)**
-- **B. Stitch** (`fp/geometry/plan.py extract_rooms`, `rooms.py`, `cli.py rank_rooms`): tall wall evidence (vertical surface
-  in >= 2 of 3 height bands) is cut back out of the footprint (its 18 cm closing filled partition walls); 0.5-1.3 m gaps
-  between runs of tall wall on a wall line are barred as doorways (= door connections); watershed seed spacing 1.2 -> 0.8 m
-  (corridors got no seed before); overlaps > 1 % repaired in favour of the room whose own footprint covers more of
-  the overlap; shared walls give an adjacency without an opening (`opening_id: null`); regions never entered with < 20 % floor
-  seen are dropped (air seen through windows); rooms ordered by area; <= 1.6 m wide and >= 2.5 m long (polygon) -> "connector".
-  Results without drift correction: **1a8384c3f6** 3 -> 8 rooms, 1 connector, 7 doors + 3 shared walls (R2/R8 overlap 16 % repaired),
-  128 s; **c7d28f72c6** 8 rooms, 1 connector, 7 doors + 3 shared walls, 199 s internal (24 min wall clock under CPU contention).
-  Known: part of the corridor merges into the open kitchen / junction (no wall at wall-band height); c7d2 R6 is a region
-  outside a window (0 s inside, warned partially observed). Tests: `tests/test_stitch.py`.
-- **C. tooling**: `fp/geometry/register2d.py` (yaw 0/90/180/270 + FFT shift + 2-D ICP), `scripts/repeatability.py`;
-  `fp run` saves `debug/wall_points_2d.npy`. Pre-drift result: same flat, yaw 90.9 deg, 55 % inliers (runner-up 27 %),
-  6/8 rooms matched, wall-to-wall spans median |diff| 1.9 cm, **3/12** within max(1 cm, 0.5 %); polygon edges 0/17 (segmentation).
-- **A. Drift (WIP, commit 958b5e3)**: `fp/recon/drift.py` written by a subagent (synthetic tests pass), wired into `fp run`
-  (`reconstruct` -> `correct_drift` -> `fuse_depth_ablation`; `_drift_report` fills `plan.drift` and writes
-  `debug/drift_ablation.png`). **Never run on real data yet.** The subagent's worktree is at
-  `.claude/worktrees/agent-a654aff8f33d38c23` (same files; delete once 03 is done).
-
-**Resume here (next session)**
-1. `uv run python scripts/exp03_drift.py data/stray/c7d28f72c6` (and 1a83, c00a): off / posegraph / plane table; pick the method
-   that measurably helps (fallback `method="plane"` exists), record it in DECISIONS.
-2. `uv run fp run data/stray/c7d28f72c6 --no-damage` and `1a8384c3f6` (drift on; check < 10 min, view `debug/drift_ablation.png`),
-   plus `--no-drift-correction` runs. Fix whatever breaks in `_drift_report`.
-3. `uv run python scripts/repeatability.py out/1a8384c3f6 out/c7d28f72c6 --md eval/repeatability_lidar.md`, add the
-   reasons the scans differ (segmentation, wall coverage, ceiling pass).
-4. Verifier subagent, then DECISIONS (D11 stitch, D12 drift, D13 repeatability), `docs/defense/03-drift-and-stitch.md`, hand-off.
+## 03 — Drift accountability and the stitched whole-property plan (LiDAR): **done** (repeatability gate missed: spans ±5.5 cm vs 1 cm)
+- **A. Drift** (`fp/recon/drift.py`, on by default, `--no-drift-correction` off): submaps every 3 m / 8 s, point-to-plane
+  ICP loop closures (fitness ≥ 0.2, RMSE ≤ 1.5 cm, constrained geometry, plausible size, ≤ 1° tilt), Open3D pose graph with
+  line process, yaw-only result (gravity stays ARKit's), corrections **blended in time** between submap centres (D12).
+  Plane-anchored fallback exists (`method="plane"`), measured and not used: it never lowers loop residuals.
+  `plan.drift.metrics` has off/on thickness, double walls, rooms, footprint, loop + odometry RMSE before/after,
+  heading spread (std of per-submap wall angle), max correction. `debug/drift_ablation.png`: off | on, doubles in red.
+  Experiment script `scripts/exp03_drift.py` (variants off / posegraph-step / posegraph / plane).
+  | capture | thickness cm off→on | double walls off→on | loop RMSE cm | loops accepted | drift s |
+  |---|---|---|---|---|---|
+  | c00a170fe1 | 2.17 → 1.71 | 4 → 2 | 4.20 → 1.91 | 2/3 | 0.9 |
+  | 1a8384c3f6 | 4.18 → 1.94 | 13 → 7 | 3.34 → 1.83 | 8/25 | 5 |
+  | c7d28f72c6 | 3.62 → 3.27 | 32 → 15 | 3.22 → 2.12 | 17/138 (5 more pruned by the graph) | 12–15 |
+  1a83's heading drift is real: per-submap wall angle +3.0° → −0.8° over 115 s (spread 1.50° → 0.79° corrected). Its
+  "max correction 68 cm / 6.9°" is mostly a rigid turn of the whole map toward submap 0, which `align` removes.
+  Bug fixed on the way: a "double wall" used to pool every cell on a coordinate across the flat; now it must be one
+  continuous side-by-side stretch ≥ 0.5 m (old counts 19/26 off were inflated).
+- **B. Stitch** (`fp/geometry/plan.py extract_rooms`, `rooms.py`, `cli.py rank_rooms`, D11), drift on:
+  **1a8384c3f6** 9 rooms, 1 connector, 12 connections, ~80–105 s, ceiling not observed (highest point 2.35 m);
+  **c7d28f72c6** 9 rooms, 1 connector, 11 connections, ~195–276 s, ceiling 2.44 m; overlaps > 1 % repaired and warned
+  (c7d2 R9/R3 10 %). No frame subsampling beyond the quality filter (1,308 / 2,629 frames kept). Known: part of the
+  corridor merges into the open kitchen; c7d2 R6 is a region outside a window (warned partially observed).
+- **C. Repeatability** (`eval/repeatability_lidar.md`, `scripts/repeatability.py`, `fp/geometry/register2d.py`, D13):
+  same flat (yaw 90.4°, 69 % inliers vs 24 % runner-up); 6 rooms matched; wall-to-wall spans **0/16** in the gate,
+  median 5.5 cm; drift off: 3/12, 1.9 cm, but 55 % inliers and edges 40 cm vs 12 cm. Correction trades a few cm of
+  in-room accuracy for global consistency; segmentation differences dominate room widths/areas.
+- Tests: `tests/test_drift.py` (12), `tests/test_stitch.py`. Debug images: `out/<id>/debug/drift_ablation.png`,
+  `rooms_split.png`, `bev.png`; experiment images `out/_exp03/<id>/drift_exp03_<variant>.png`.
+- **Verifier** (all 6 checks pass): fresh runs 95 s / 174 s, 0.000 % residual overlap, numbers match. Found: a 10° yaw
+  injected into half of 1a83 is mostly left uncorrected (plausibility gate rejects the loops; ~2° removed) while loop RMSE
+  still looks good -> `fp run` now warns when the heading spread widens by > 0.5° (`HEADING_WORSE_DEG`, fp/cli.py).
+  `debug/rooms_split.png` shows the watershed before the room filter (a dropped 1.9 m² strip still coloured, kept R6 grey):
+  redraw it from the final rooms in 04. `--max-frames` is a no-op on LiDAR captures (it only caps learned-depth frames).
+- **For 04 and later:** openings/connections from 03 are rough (doorway gaps on wall lines, shared walls have
+  `opening_id: null`). Ceiling is one flat-wide value (2.44 m on c7d2); per-room ceilings are 04. If 07 shows
+  span accuracy matters more than double walls, try a per-room refinement after correction (D13).
+  (The old subagent worktree from 03 is removed.)
 ## 04 — Openings (doors, windows, passages) and per-room ceiling height: not started
 ## 05 — Video and photo tiers (no depth, no poses): not started
 ## 06 — Damage regions, concealed-damage flags, scope line items: not started

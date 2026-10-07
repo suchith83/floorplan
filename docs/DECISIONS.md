@@ -106,3 +106,50 @@ One entry per real decision: context → options → choice → evidence. Newest
   kept in the plan but warned as "partially observed". Time, not frame count: the filter drops still frames.
 - **Evidence.** c00a170fe1: R1 32.1 s, R2 (glimpsed through the door) 1.1 s → warned. Without the 0.3 m
   inset R2 scored 3.0 s because the camera stood in the doorway. On 1a8384c3f6, 3 of 4 rooms are visited.
+
+## D11. Whole-flat stitch: walls cut out of the footprint, doorways barred, watershed split
+- **Context.** On 1a8384c3f6 the 02 pipeline found 3 rooms (R1 = 44 m², several rooms merged): the 18 cm
+  footprint closing filled partition walls, and the corridor never got a watershed seed.
+- **Options.** (a) Beta's watershed as-is; (b) learned room segmentation; (c) watershed on a footprint with the
+  wall evidence put back.
+- **Choice.** (c): tall wall evidence (vertical surface in ≥ 2 of 3 height bands) is cut out of the footprint;
+  0.5–1.3 m gaps between runs of tall wall on one wall line are barred as doorways (= door connections); seed
+  spacing 1.2 → 0.8 m. Overlap > 1 % of the smaller room goes to the room whose own footprint covers more of
+  it (warned). Regions never entered with < 20 % floor seen are dropped (air through a window). R1..Rn by area;
+  ≤ 1.6 m wide and ≥ 2.5 m long → "connector".
+- **Evidence.** 1a8384c3f6: 3 → 9 rooms, 1 connector, 12 connections (drift on). c7d28f72c6: 9 rooms,
+  1 connector, 11 connections. Known: part of the corridor merges into the open kitchen (no wall at wall-band
+  height); c7d2 R6 is a region outside a window (0 s inside, warned partially observed).
+
+## D12. Drift correction: pose graph over submaps, ICP loop closures, corrections blended in time
+- **Context.** ARKit gravity is accurate, but heading and position drift over a multi-minute walk: on 1a83 the
+  per-submap wall angle slides +3.0° → −0.8° over 115 s, and walls seen twice land 4–20 cm apart.
+- **Options.** (a) poses as-is (fails the work order); (b) plane-anchored yaw: snap each submap's walls to the
+  global Manhattan axes; (c) submaps (3 m / 8 s) + point-to-plane ICP loop closures (fitness ≥ 0.2, RMSE ≤ 1.5 cm,
+  all directions constrained, plausible size, ≤ 1° tilt) + Open3D pose graph, yaw-only result; (d) (b) after (c).
+  For (c), one rigid step per submap or a blend of the two bracketing submaps by time.
+- **Choice.** (c) with the time blend (`fp/recon/drift.py`, default; `--no-drift-correction` turns it off).
+- **Evidence** (`scripts/exp03_drift.py`; thickness cm / double walls / loop RMSE cm before→after):
+
+  | capture | off | posegraph blended | posegraph step | plane |
+  |---|---|---|---|---|
+  | c00a170fe1 | 2.17 / 4 / 4.20 | 1.71 / 2 / 1.91 | 1.67 / 1 / 1.91 | 1.77 / 3 / 4.33 |
+  | 1a8384c3f6 | 4.18 / 13 / 3.34 | **1.94 / 7 / 1.83** | 1.96 / 8 / 1.83 | 4.10 / 18 / 2.98 |
+  | c7d28f72c6 | 3.62 / 32 / 3.22 | **3.27 / 15 / 2.12** | 3.26 / 19 / 2.12 | 3.05 / 36 / 3.48 |
+
+  The plane method never lowers the loop residual and adds doubles on c7d2 (it fixes heading, not position);
+  (d) was worse than (c) alone in an earlier run (1a83 thickness 2.34 vs 1.96). The blend beats the step on
+  doubles on both flats. On c7d2 the pose graph pruned 5 of 22 ICP-accepted loops as inconsistent.
+- **Cost.** Corrections are good to ~1–2 cm, which moves in-room spans by 2–6 cm (D13). Accepted, because the
+  alternative (no correction) leaves doubled walls and rooms that don't match across scans.
+
+## D13. Repeatability reported as measured, gate missed
+- **Context.** Gate: per wall within max(1 cm, 0.5 %) between the two flat scans.
+- **Choice.** 2-D registration (yaw 0/90/180/270 + ICP on wall points), rooms matched by centroid, wall-to-wall
+  spans compared (a tape measure's view, independent of where segmentation ends a room). No threshold changed
+  after seeing these numbers.
+- **Evidence** (`eval/repeatability_lidar.md`). Same flat: 69 % inliers vs 24 % for the runner-up yaw. Spans
+  0/16 within the gate, median |Δ| 5.5 cm. Drift off: 3/12 spans, median 1.9 cm, but 55 % inliers, 6/8 rooms
+  matched and edges 40 cm vs 12 cm. Same-scan off vs on moves spans 2.3 cm (c7d2) / 5.5 cm (1a83) median.
+  Drift correction buys global consistency at a few cm of local accuracy; a better local model (e.g. per-room
+  refinement after correction) is future work.
