@@ -4,8 +4,9 @@ Two jobs:
  1. `empty_plan` gives a valid plan before any stage has run, so a stage that isn't built yet leaves
     its fields `observed: false` with a warning instead of breaking the contract.
  2. `fill_from_geometry` converts what fp/geometry produces (walls, room polygons, doorway necks)
-    into Measures with PROVISIONAL 90% intervals. Work order 07 replaces the constants below with
-    values calibrated on tape ground truth.
+    into Measures with 90% intervals: this module computes each measurement's evidence term `a`, and
+    fp/calibration.py turns it into a half-width, half = k*a + b*value, with k and b fitted in work order 07
+    (fp/calibration.json) or, without that file, the provisional values below (k = 1, b = SCALE_REL).
 
 Interval model (simple on purpose, every term explainable):
  - Each wall plane has a position uncertainty  pos = POS_BASE x TIER_SCALE + SMEAR_K x spread,
@@ -19,7 +20,8 @@ Interval model (simple on purpose, every term explainable):
    plus SCALE_REL x perimeter.
  - Ceiling: CEILING_HALF x TIER_SCALE + SCALE_REL x height.
  - Smear is measured in the cloud itself, so it is added as-is, not multiplied by the tier scale.
- - Each half-width adds its terms (worst case), so the intervals are conservative until 07 calibrates them.
+ - Each half-width adds its terms (worst case). The sums above are the evidence terms `a`; calibration scales
+   them by k and replaces SCALE_REL by a fitted b (fp/calibration.py).
 """
 from __future__ import annotations
 
@@ -27,17 +29,17 @@ from pathlib import Path
 
 import numpy as np
 
+from fp import calibration as cal
+from fp.calibration import SCALE_REL  # noqa: F401  (provisional relative terms; fp/damage/project.py uses them)
+
 SCHEMA_VERSION = "1.0"
 LEVEL = 0.9  # the stated coverage of every [lo, hi]
 
-# --- provisional interval constants (calibrated in work order 07) ---
+# --- evidence-term constants (k and b on top of them are fitted in work order 07, fp/calibration.py) ---
 TIER_SCALE = {"lidar": 1.0, "video": 3.0, "photos": 6.0}  # interval multiplier vs LiDAR (report badge "x N")
 POS_BASE = 0.01        # m: plane-fit error of a sharp LiDAR wall (a clean wall band is about 1 cm thick)
 SMEAR_K = 1.0          # m per m of wall-band thickness: a 4 cm smear means the plane could be 4 cm off
 INFERRED_FACTOR = 3.0  # a wall that was not seen sits on the floor's edge: 3x less certain
-# Learned metric depth (MapAnything) has a global scale error; the brief's own gates are 3% (video)
-# and 8% (photos), so the provisional relative term matches them.
-SCALE_REL = {"lidar": 0.0, "video": 0.03, "photos": 0.08}
 CEILING_HALF = 0.02    # m: LiDAR ceiling-minus-floor layer distance, before the tier scale
 NECK_HALF = 0.10       # m: a doorway taken as the narrowest neck of the floor mask, not jamb planes
 
@@ -59,11 +61,12 @@ class StageNotBuilt(StageError):
 
 
 def measure(value, half, unit: str, method: str, observed: bool = True) -> dict:
-    """A Measure dict with a symmetric interval value +- half (half=None -> no interval)."""
+    """A Measure dict with the interval value +- half (half=None -> no interval). Every quantity in the plan is a
+    length, area or count, so lo is clipped at 0 (wide camera-tier intervals would otherwise go negative)."""
     if value is None:
         return {"value": None, "lo": None, "hi": None, "unit": unit, "method": method, "observed": False}
     value, half = float(value), float(half)
-    return {"value": round(value, 4), "lo": round(value - half, 4), "hi": round(value + half, 4),
+    return {"value": round(value, 4), "lo": round(max(value - half, 0.0), 4), "hi": round(value + half, 4),
             "unit": unit, "method": method, "observed": bool(observed)}
 
 
@@ -78,10 +81,11 @@ def empty_plan(tier: str, capture_id: str, source: dict, device: str | None = No
         "capture_id": capture_id,
         "device": device,
         "frame": {"up": "z", "floor_z": 0.0, "units": "m", "T_plan_world": None},
-        "intervals": {"level": LEVEL, "scale": TIER_SCALE[tier], "calibrated": False,
-                      "method": "provisional: plane position error x tier scale (fp/contract.py); "
-                                "calibrated in work order 07"},
-        "source": source,
+        "intervals": {"level": LEVEL, "scale": TIER_SCALE[tier], "calibrated": cal.tier_calibrated(tier),
+                      "method": cal.method(tier)},
+        # the k, b each Measure type used: lets eval/ recover every Measure's evidence term a from [lo, hi]
+        "source": {**source, "interval_model": {ty: {"k": c["k"], "b": c["b"]}
+                                                for ty, c in cal.load()["constants"][tier].items()}},
         "rooms": [],
         "connections": [],
         "footprint_area": not_observed("m2", "no rooms reconstructed"),
@@ -104,12 +108,11 @@ def room_to_schema(room: dict, tier: str, extra_rel: float = 0.0, ceiling: dict 
     extra_rel: added to the tier's relative scale term when the learned scale disagrees with priors.
     ceiling: this room's result from fp.geometry.ceiling.room_ceiling (None: the whole-capture value)."""
     rid, walls = room["id"], room["walls"]
-    rel = SCALE_REL[tier] + extra_rel
     pos = [_pos_half(w, tier) for w in walls]
     out_walls = []
     for k, w in enumerate(walls):
         prev, nxt = walls[k - 1], walls[(k + 1) % len(walls)]
-        half = pos[k - 1] + pos[(k + 1) % len(walls)] + rel * w["length_m"]
+        half = cal.half(tier, "wall_length", pos[k - 1] + pos[(k + 1) % len(walls)], w["length_m"], extra_rel)
         both_seen = prev["observed"] and nxt["observed"]
         method = "distance between neighbouring wall planes" + ("" if both_seen else " (a neighbour was inferred)")
         out_walls.append({"id": f"{rid}.{w['id']}", "p0": w["p0"], "p1": w["p1"],
@@ -117,15 +120,16 @@ def room_to_schema(room: dict, tier: str, extra_rel: float = 0.0, ceiling: dict 
                           "observed": bool(w["observed"]), "coverage": float(w["coverage"])})
     lengths = np.array([w["length_m"] for w in walls])
     all_seen = all(w["observed"] for w in walls)
-    area_half = float(np.sum(lengths * pos)) + 2 * rel * room["area_m2"]
-    perim_half = 2 * float(np.sum(pos)) + rel * float(lengths.sum())
+    area_half = cal.half(tier, "floor_area", float(np.sum(lengths * pos)), room["area_m2"], extra_rel)
+    perim_half = cal.half(tier, "perimeter", 2 * float(np.sum(pos)), float(lengths.sum()), extra_rel)
     if ceiling is not None:
         H = ceiling["h"]
-        ceiling = (measure(H, ceiling["half"] * TIER_SCALE[tier] + rel * H, "m", ceiling["method"])
+        ceiling = (measure(H, cal.half(tier, "ceiling", ceiling["half"] * TIER_SCALE[tier], H, extra_rel), "m",
+                           ceiling["method"])
                    if H is not None else not_observed("m", ceiling.get("reason") or "no ceiling layer found"))
     else:
         H = room.get("ceiling_h_m")
-        ceiling = (measure(H, CEILING_HALF * TIER_SCALE[tier] + rel * H, "m",
+        ceiling = (measure(H, cal.half(tier, "ceiling", CEILING_HALF * TIER_SCALE[tier], H, extra_rel), "m",
                            "ceiling layer minus floor layer (whole capture)")
                    if H is not None else not_observed("m", "no ceiling layer found"))
     return {
@@ -147,13 +151,15 @@ def _nearest_wall(room: dict, c) -> dict:
     return min(room["walls"], key=dist)
 
 
-def _m(d: dict | None, tier_scale: float, rel: float, unit: str = "m") -> dict | None:
-    """Internal {value, half, method, observed} (LiDAR-scale half) -> Measure scaled for the tier."""
+def _m(d: dict | None, tier: str, extra_rel: float, unit: str = "m") -> dict | None:
+    """Internal {value, half, method, observed} -> Measure. `half` is the evidence term a, already scaled for the
+    tier by fp/geometry/openings.py (jamb positions x tier scale), so it is not scaled again here."""
     if d is None:
         return None
     if d["value"] is None:
         return not_observed(unit, d["method"])
-    return measure(d["value"], d["half"] * tier_scale + rel * d["value"], unit, d["method"], observed=d["observed"])
+    return measure(d["value"], cal.half(tier, "opening", d["half"], d["value"], extra_rel), unit, d["method"],
+                   observed=d["observed"])
 
 
 def add_openings(plan: dict, openings: list[dict]) -> set[tuple[str, str]]:
@@ -162,7 +168,6 @@ def add_openings(plan: dict, openings: list[dict]) -> set[tuple[str, str]]:
     pairs now connected by a measured opening."""
     tier = plan["tier"]
     extra = ((plan["source"].get("recon") or {}).get("scale_check") or {}).get("extra_rel", 0.0)
-    rel, ts = SCALE_REL[tier] + extra, TIER_SCALE[tier]
     by_id = {r["id"]: r for r in plan["rooms"]}
     pairs = set()
     for o in openings:
@@ -174,7 +179,8 @@ def add_openings(plan: dict, openings: list[dict]) -> set[tuple[str, str]]:
         rooms = o["rooms"] if o["rooms"] and all(r in by_id for r in o["rooms"]) else None
         room["openings"].append({
             "id": oid, "kind": o["kind"], "wall_id": o["wall_id"], "rooms": rooms,
-            "width": _m(o["width"], ts, rel), "height": _m(o["height"], ts, rel), "sill": _m(o["sill"], ts, rel),
+            "width": _m(o["width"], tier, extra), "height": _m(o["height"], tier, extra),
+            "sill": _m(o["sill"], tier, extra),
             "center": [float(v) for v in o["center"]]})
         if rooms:
             plan["connections"].append({"rooms": rooms, "opening_id": oid})
@@ -191,6 +197,9 @@ def fill_from_geometry(plan: dict, rooms: list[dict], connections: list[dict], o
     # camera tiers: a learned scale that disagrees with priors widens intervals (fp/recon/camera.scale_check)
     extra = ((plan["source"].get("recon") or {}).get("scale_check") or {}).get("extra_rel", 0.0)
     plan["rooms"] = [room_to_schema(r, tier, extra, (ceilings or {}).get(r["id"])) for r in rooms]
+    # each wall plane's evidence term (m): eval/ rebuilds wall-to-wall span intervals from it (work order 07)
+    plan["source"]["wall_plane_pos"] = {f"{r['id']}.{w['id']}": round(_pos_half(w, tier), 4)
+                                        for r in rooms for w in r["walls"]}
     by_id = {r["id"]: r for r in plan["rooms"]}
     linked = add_openings(plan, openings) if openings is not None else set()
     for c in connections:
@@ -207,7 +216,8 @@ def fill_from_geometry(plan: dict, rooms: list[dict], connections: list[dict], o
         room["openings"].append({
             "id": oid, "kind": "passage" if c.get("kind") == "opening" else "door",
             "wall_id": _nearest_wall(room, c["center"])["id"], "rooms": [a, b],
-            "width": measure(c["width_m"], NECK_HALF * TIER_SCALE[tier], "m",
+            "width": measure(c["width_m"], cal.half(tier, "opening", NECK_HALF * TIER_SCALE[tier], c["width_m"], extra),
+                             "m",
                              "narrowest neck of the floor footprint between the rooms (not jamb planes)",
                              observed=False),
             "height": None, "sill": None, "center": [float(v) for v in c["center"]]})

@@ -100,7 +100,8 @@ def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local",
                                    else "not run: no poses reached the geometry stage")
     if not plan["rooms"]:
         warn("rooms", "No rooms reconstructed.")
-    warn("intervals", "Intervals are provisional (fp/contract.py), not yet calibrated on ground truth (work order 07).")
+    if not plan["intervals"]["calibrated"]:
+        warn("intervals", "Intervals are provisional (fp/contract.py, D5): no calibration file for this tier.")
     timings["total"] = round(time.perf_counter() - t0, 2)
     try:
         plan = _validated(plan)
