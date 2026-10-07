@@ -63,10 +63,30 @@ def test_merge_chunks_undoes_a_per_chunk_similarity():
     s, R, t = _sim3(4)                         # chunk b came out in its own frame and scale
     zb["T_wc"] = np.array([np.r_[np.c_[R @ M[:3, :3], s * R @ M[:3, 3] + t], [[0, 0, 0, 1]]] for M in zb["T_wc"]])
     zb["depth"] = (zb["depth"].astype(np.float32) * s).astype(np.float16)
-    z, stats = camera._merge_chunks([(a_idx, za), (b_idx, zb)], n)
+    z, stats, corr = camera._merge_chunks([(a_idx, za), (b_idx, zb)], n)
     assert stats[0]["shared_frames"] == 3
     assert abs(stats[0]["scale"] - 1 / s) < 0.01
-    assert np.allclose(z["T_wc"][:, :3, 3], T[:, :3, 3], atol=0.02)
+    # chunk b's own metric claim was off by s, chunk a's was right: the median of the two votes is between
+    assert abs(corr - (1 + s) / 2) < 0.01
+    assert np.allclose(z["T_wc"][:, :3, 3], corr * T[:, :3, 3], atol=0.02)
+
+
+def test_chained_merge_scale_does_not_drift_with_noisy_depth():
+    """Five chunks, every pass predicting the same views with independent 15 % depth noise: the depth-ratio
+    median keeps each link's scale at 1 (a least-squares point fit shrinks it, and the shrink compounds)."""
+    n, size, ov = 30, 10, 4
+    T = np.repeat(np.eye(4)[None], n, 0)
+    T[:, 0, 3] = np.linspace(0, 6, n)
+    full = _fake_pass(T)
+    parts = []
+    for k, c in enumerate(camera.chunks(n, size, ov)):
+        z = {key: v[c].copy() for key, v in full.items()}
+        noise = np.random.default_rng(k).normal(1, 0.15, z["depth"].shape)
+        z["depth"] = (z["depth"].astype(np.float32) * noise).astype(np.float16)
+        parts.append((c, z))
+    z, stats, corr = camera._merge_chunks(parts, n)
+    assert all(abs(st["scale"] - 1) < 0.02 for st in stats), stats
+    assert abs(corr - 1) < 0.03
 
 
 def _room_cloud(up: np.ndarray, cams_world: np.ndarray):
@@ -104,16 +124,13 @@ def test_gravity_from_a_sideways_phone():
     assert camera.floor_check(rec, est) < 1.0
 
 
-def test_cache_key_depends_on_content_and_params_only():
-    frames = [Frame(rgb=Path(f"/tmp/whatever/{i}.jpg")) for i in range(3)]
-    b1 = CaptureBundle("photos", frames, meta={"_source_ids": ["a", "b", "c"], "_K_prior": [None] * 3})
-    b2 = CaptureBundle("photos", [Frame(rgb=Path(f"/elsewhere/{i}.jpg")) for i in range(3)],
-                       meta={"_source_ids": ["a", "b", "c"], "_K_prior": [None] * 3})
-    p = {"x": 1}
-    assert camera.cache_key(b1, p) == camera.cache_key(b2, p)            # paths don't matter
-    b2.meta["_source_ids"][1] = "B"
-    assert camera.cache_key(b1, p) != camera.cache_key(b2, p)            # bytes do
-    assert camera.cache_key(b1, p) != camera.cache_key(b1, {"x": 2})     # parameters do
+def test_pass_key_depends_on_content_priors_and_params_only(monkeypatch):
+    k = camera.pass_key(["a", "b", "c"], [None] * 3)                     # no paths in the key at all
+    assert k == camera.pass_key(["a", "b", "c"], [None] * 3)
+    assert k != camera.pass_key(["a", "B", "c"], [None] * 3)              # bytes do
+    assert k != camera.pass_key(["a", "b", "c"], [None, np.eye(3), None])  # intrinsics priors do
+    monkeypatch.setitem(camera.MODEL_PARAMS, "resolution_set", 1)
+    assert k != camera.pass_key(["a", "b", "c"], [None] * 3)              # parameters do
 
 
 def test_photo_rooms_without_any_link_are_left_unplaced(tmp_path):

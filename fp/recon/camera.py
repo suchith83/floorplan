@@ -5,21 +5,25 @@ out, all views in ONE shared world frame. It runs on this machine by default (CU
 CPU); `--backend modal` sends the same images to a Modal GPU instead (optional, never needed).
 
 Three jobs on top of the model:
- 1. Deterministic cache. Key = sha1(model id + parameters + every input frame's content id, which is a
-    hash of the source bytes, fp/ingest). Value = one .npz of depth, conf, mask, K, T_wc, the processed
-    RGB and the metric scale. A cache hit replays exactly what the live run produced; `--no-cache` forces
-    the live run. The cache lives in <out>/../_cache/recon/ (scripts/cache_sync.py publishes/fetches it).
+ 1. Deterministic cache, one entry per model pass. Key = sha1(model id + parameters + the content id of
+    every frame in the pass, which is a hash of the source bytes, fp/ingest, + intrinsics priors). Value =
+    one .npz of the model's raw output: depth, conf, mask, K, T_wc, the processed RGB and the metric scale.
+    A cache hit replays exactly what the live pass produced; everything after the model (chunk merge,
+    fusion, geometry) always runs. `--no-cache` forces live passes. The cache lives in
+    <out>/../_cache/recon/ (scripts/cache_sync.py publishes/fetches it).
  2. Chunks. The model attends over all views at once, so memory grows with the view count. Long videos
-    run in overlapping chunks of <= CHUNK views; each chunk is merged into the first by the Sim(3)
-    (rotation, translation, scale) that best maps the shared frames' 3D points onto each other.
+    run in overlapping chunks of <= CHUNK views. Chunk k is put into chunk k-1's frame using the frames
+    they share: scale = median ratio of their depths at the same pixel (same image, two predictions);
+    rotation and translation = the average over shared frames of the move between their two camera poses.
+    Each chunk also predicted its own metric scale, so the final scale is the median of every chunk's
+    vote, not chunk 1's alone.
  3. Photos: ALL rooms' photos go into one joint pass, so every room lands in one frame and the rooms
     stitch. Rooms are linked by a photo saved in both rooms' folders (identical bytes) or by enough
     feature matches between their photos. A room linked only by matches is checked: if its matched
     points disagree in 3D, it is re-placed by a Sim(3) on those matches. A room with no link at all
     is not placed (its frames are dropped from the plan) and named in a warning, never overlapped.
 
-Gravity: the cameras' mean "up" is only a guess (a phone may be held sideways and a Stray rgb.mp4 has no
-rotation tag), so each of the four in-image directions is tried and refined onto the horizontal surfaces
+Gravity: the cameras' mean "up" is only a guess (a phone may be held sideways or tilted), so each of the four in-image directions is tried and refined onto the horizontal surfaces
 (floor, ceiling, table tops); the winner has the floor below the cameras. The result is checked against a
 plane fitted to the floor.
 Scale: metric scale comes from the model alone (it learned the size of things: doors, tiles, furniture).
@@ -44,11 +48,13 @@ MODEL_ID = "facebook/map-anything-apache"
 # Everything that changes the model's output is part of the cache key.
 MODEL_PARAMS = {"resolution_set": 518, "amp": "bf16", "apply_mask": True, "mask_edges": True,
                 "intrinsics_prior": True, "version": 1}
-CHUNK = 40            # views per model pass (set from measured MPS memory, docs/STATUS.md 05)
+CHUNK = 24            # views per model pass: 24 views = 37 s, 9.8 GB MPS peak on a 16 GB M5; 40 views swaps (STATUS 05)
 OVERLAP = 6           # frames shared by consecutive video chunks; the Sim(3) between chunks is fitted on them
 CONF_PERCENTILE = 10  # drop the least confident 10 % of pixels (sky-like voids, reflections, far clutter)
-SIM3_SAMPLES = 4000   # 3D point pairs per Sim(3) fit
+SIM3_SAMPLES = 4000   # 3D point pairs per Sim(3) fit / residual check
 SIM3_TRIM = 0.5       # refit on the best half of the pairs: robust to bad depth on one side
+MERGE_WARN_M = 0.25   # m, median 3D gap between two chunks' predictions of their shared frames after the merge
+                      # above which the run warns: larger than a wall band, so walls from the two chunks double
 # Photo rooms
 MIN_MATCHES = 40      # RANSAC inliers between two photos of different rooms that count as "same view"
 MATCH_SIDE = 800      # px, longest side for feature matching
@@ -215,93 +221,127 @@ def chunks(n: int, size: int = CHUNK, overlap: int = OVERLAP) -> list[list[int]]
     return [list(range(s, s + size)) for s in starts]
 
 
-def _merge_chunks(parts: list[tuple[list[int], dict]], n: int) -> tuple[dict, list[dict]]:
-    """Chain chunk k onto chunk k-1 by the Sim(3) on their shared frames (k-1 already in chunk 0's frame).
-    A frame in two chunks keeps the earlier chunk's prediction."""
+def _rotation_mean(Rs: list[np.ndarray]) -> np.ndarray:
+    """Chordal mean of rotations: the rotation nearest (Frobenius) to their sum."""
+    U, _, Vt = np.linalg.svd(np.sum(Rs, axis=0))
+    D = np.eye(3)
+    D[2, 2] = np.sign(np.linalg.det(U @ Vt))
+    return U @ D @ Vt
+
+
+def _relative_sim3(z: dict, zi: list[int], prev: dict, pi: list[int]) -> tuple[float, np.ndarray, np.ndarray]:
+    """Sim(3) taking pass `z` into pass `prev`'s frame from frames both passes saw (z view zi[k] = prev view pi[k]).
+    Scale: median over shared pixels of depth_prev / depth_z (the same pixel of the same image, predicted
+    twice). Unlike a least-squares point fit, a ratio median is not biased towards 0 by noisy pairs, so the
+    error doesn't compound along a chain of chunks. Rotation/translation: average of the per-frame moves
+    R_prev R_z^T and c_prev - s R c_z between the two camera poses of each shared frame."""
+    ratios, Rs = [], []
+    for a, b in zip(zi, pi):
+        ok = z["mask"][a] & prev["mask"][b] & (z["depth"][a] > 0) & (prev["depth"][b] > 0)
+        ratios.append(prev["depth"][b][ok].astype(np.float32) / z["depth"][a][ok].astype(np.float32))
+        Rs.append(prev["T_wc"][b][:3, :3] @ z["T_wc"][a][:3, :3].T)
+    r = np.concatenate(ratios)
+    if len(r) < 100:
+        raise StageError("recon", "Two video chunks share too little valid depth to be merged.")
+    s = float(np.median(r))
+    R = _rotation_mean(Rs)
+    t = np.median([prev["T_wc"][b][:3, 3] - s * R @ z["T_wc"][a][:3, 3] for a, b in zip(zi, pi)], axis=0)
+    return s, R, t
+
+
+def _merge_chunks(parts: list[tuple[list[int], dict]], n: int) -> tuple[dict, list[dict], float]:
+    """Chain chunk k onto chunk k-1 (already in chunk 0's frame) by the Sim(3) from their shared frames,
+    then rescale everything by the median of the chunks' metric-scale votes. A frame in two chunks keeps
+    the earlier chunk's prediction. Returns (arrays, per-merge stats, the final metric correction)."""
     rng = np.random.default_rng(0)
     first_idx, z0 = parts[0]
     out = {k: [None] * n for k in z0}
     stats = []
+    votes = [1.0]   # chunk k (scaled by s_k into chunk 0's units) says metric = chunk-0 units / s_k
     prev_idx, prev = first_idx, z0
     for k, (idx, z) in enumerate(parts):
         if k > 0:
             shared = sorted(set(idx) & set(prev_idx))
-            A, B = [], []
-            for g in shared:
-                a, b = _shared_view_pairs(z, idx.index(g), prev, prev_idx.index(g), rng)
-                A.append(a)
-                B.append(b)
-            A, B = np.concatenate(A), np.concatenate(B)
-            if len(A) < 100:
-                raise StageError("recon", f"Video chunk {k + 1} shares too little valid depth with chunk {k} to be merged.")
-            s, R, t, res = robust_sim3(A, B)
+            s, R, t = _relative_sim3(z, [idx.index(g) for g in shared], prev, [prev_idx.index(g) for g in shared])
             _apply_sim3(z, range(len(idx)), s, R, t)
-            stats.append({"chunk": k + 1, "shared_frames": len(shared), "scale": round(s, 4),
-                          "median_residual_m": round(res, 4)})
+            res = [np.median(np.linalg.norm(a - b, axis=1)) for a, b in
+                   (_shared_view_pairs(z, idx.index(g), prev, prev_idx.index(g), rng) for g in shared)]
+            votes.append(votes[-1] / s)
+            stats.append({"chunk": k + 1, "views": [idx[0], idx[-1]], "shared_frames": len(shared), "scale": round(s, 4),
+                          "median_residual_m": round(float(np.median(res)), 4)})
         for j, g in enumerate(idx):
             if out["depth"][g] is None:
                 for key in out:
                     out[key][g] = z[key][j]
         prev_idx, prev = idx, z
-    return {k: np.stack(v) for k, v in out.items()}, stats
+    zz = {k: np.stack(v) for k, v in out.items()}
+    corr = float(np.median(votes))
+    _apply_sim3(zz, range(n), corr, np.eye(3), np.zeros(3))
+    return zz, stats, corr
 
 
 # ----------------------------------------------------------------------------- cache
 
-def cache_key(bundle: CaptureBundle, backend_independent_params: dict) -> str:
-    ids = bundle.meta.get("_source_ids")
-    if not ids or len(ids) != len(bundle.frames):
-        raise StageError("recon", "Frames carry no content ids; cannot build a deterministic cache key.")
-    h = hashlib.sha1(json.dumps({"model": MODEL_ID, **backend_independent_params}, sort_keys=True).encode())
-    for i in ids:
+def pass_key(ids: list[str], K_prior: list) -> str:
+    """Cache key of one model pass: model id + parameters + each frame's content id + intrinsics prior."""
+    h = hashlib.sha1(json.dumps({"model": MODEL_ID, **MODEL_PARAMS}, sort_keys=True).encode())
+    for i, K in zip(ids, K_prior):
         h.update(i.encode())
-    for K in bundle.meta.get("_K_prior") or []:
         h.update(b"none" if K is None else np.asarray(K, np.float64).round(3).tobytes())
     return h.hexdigest()
 
 
-def _predict(bundle: CaptureBundle, cache_dir: Path, backend: str, use_cache: bool) -> tuple[dict, dict]:
-    """All passes for this bundle, from the cache or live. Returns (per-frame arrays, info)."""
-    params = {**MODEL_PARAMS, "chunk": CHUNK, "overlap": OVERLAP, "tier": bundle.source,
-              "groups": bundle.meta.get("_recon_groups")}
-    key = cache_key(bundle, params)
-    path = Path(cache_dir) / "recon" / f"{key}.npz"
+def _pass(paths, ids, Kp, cache_dir: Path, backend: str, use_cache: bool) -> tuple[dict, bool]:
+    """One model pass, replayed from the cache when present. Returns (raw outputs, from_cache)."""
+    path = Path(cache_dir) / "recon" / f"{pass_key(ids, Kp)}.npz"
     if use_cache and path.is_file():
-        z = dict(np.load(path, allow_pickle=False))
-        info = json.loads(str(z.pop("info")))
-        print(f"recon: replaying cache {path}")
-        return z, {**info, "cache_key": key}
-    t0 = time.perf_counter()
+        return dict(np.load(path, allow_pickle=False)), True
+    print(f"recon: MapAnything ({backend}, {device() if backend == 'local' else 'gpu'}) on {len(paths)} views ...")
+    z = _infer(paths, Kp, backend)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp.npz")
+    np.savez_compressed(tmp, **z)
+    tmp.replace(path)
+    return z, False
+
+
+def _predict(bundle: CaptureBundle, cache_dir: Path, backend: str, use_cache: bool) -> tuple[dict, dict]:
+    """All passes for this bundle (cached or live), chunks merged. Returns (per-frame arrays, info)."""
+    ids = bundle.meta.get("_source_ids")
+    if not ids or len(ids) != len(bundle.frames):
+        raise StageError("recon", "Frames carry no content ids; cannot build a deterministic cache key.")
     paths = [f.rgb for f in bundle.frames]
     Kp = bundle.meta.get("_K_prior") or [None] * len(paths)
     groups = bundle.meta.get("_recon_groups") or [list(range(len(paths)))]
     n = len(paths)
     merged = {}
-    chunk_stats = []
+    chunk_stats, corrections, keys, hits = [], [], [], 0
     for g in groups:   # photos: one group per set of linked rooms; video: one group (chunked)
         parts = []
         for c in chunks(len(g)):
             idx = [g[j] for j in c]
-            print(f"recon: MapAnything ({backend}, {device() if backend == 'local' else 'gpu'}) on {len(idx)} views ...")
-            parts.append((idx, _infer([paths[i] for i in idx], [Kp[i] for i in idx], backend)))
-        z, st = _merge_chunks([([g.index(i) for i in idx], zz) for idx, zz in parts], len(g)) if len(parts) > 1 \
-            else (parts[0][1], [])
-        chunk_stats += st
+            z, hit = _pass([paths[i] for i in idx], [ids[i] for i in idx], [Kp[i] for i in idx], cache_dir, backend, use_cache)
+            hits += hit
+            keys.append(pass_key([ids[i] for i in idx], [Kp[i] for i in idx]))
+            parts.append((idx, z))
+        if len(parts) > 1:
+            z, st, corr = _merge_chunks([([g.index(i) for i in idx], zz) for idx, zz in parts], len(g))
+            chunk_stats += st
+            corrections.append(round(corr, 4))
+        else:
+            z = parts[0][1]
         for key_ in z:
             merged.setdefault(key_, [None] * n)
             for j, i in enumerate(g):
                 merged[key_][i] = z[key_][j]
+    if hits:
+        print(f"recon: {hits}/{len(keys)} model passes replayed from {Path(cache_dir) / 'recon'}")
     # frames outside every group (should not happen) get empty predictions
     shapes = {k: next(v for v in merged[k] if v is not None) for k in merged}
     z = {k: np.stack([v if v is not None else np.zeros_like(shapes[k]) for v in merged[k]]) for k in merged}
-    info = {"backend": backend, "device": device() if backend == "local" else "modal-gpu", "model": MODEL_ID,
-            "views": n, "passes": sum(len(chunks(len(g))) for g in groups), "chunk_merges": chunk_stats,
-            "live_s": round(time.perf_counter() - t0, 1)}
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp.npz")
-    np.savez_compressed(tmp, info=json.dumps(info), **z)
-    tmp.replace(path)
-    return z, {**info, "cache_key": key}
+    info = {"backend": backend, "model": MODEL_ID, "views": n, "passes": len(keys), "chunk_merges": chunk_stats,
+            "metric_vote_correction": corrections, "cache_keys": keys}
+    return z, info
 
 
 # ----------------------------------------------------------------------------- photo rooms
@@ -524,6 +564,14 @@ def reconstruct(bundle: CaptureBundle, work: Path, cache_dir: Path, backend: str
         info["unplaced_rooms"] = g["unplaced"]
     z, pinfo = _predict(bundle, cache_dir, backend, use_cache)
     info.update(pinfo)
+    for st in info["chunk_merges"]:
+        if st["median_residual_m"] > MERGE_WARN_M:
+            t0, t1 = (bundle.frames[i].timestamp for i in st["views"])
+            span = f" ({t0:.0f}-{t1:.0f} s)" if t0 is not None and t1 is not None else ""
+            warnings.append(f"Chunk {st['chunk']}{span} disagrees with the previous chunk by "
+                            f"{st['median_residual_m']:.2f} m on the frames they share: the model's camera poses are "
+                            f"inconsistent there (fast motion or close-ups), so walls seen in that stretch may be doubled "
+                            f"or misplaced.")
     if bundle.source == "photos" and info.get("room_links"):
         info["replaced_rooms"] = _check_matched_rooms(z, bundle, g["links"], warnings)
     keep = sorted({i for grp in bundle.meta.get("_recon_groups") or [range(len(bundle.frames))] for i in grp})
@@ -567,7 +615,6 @@ def reconstruct(bundle: CaptureBundle, work: Path, cache_dir: Path, backend: str
         tt = np.arange(t[0], t[-1], 0.1)
         bundle.meta["_trajectory"] = (tt, np.stack([np.interp(tt, t, c[:, k]) for k in range(3)], 1))
     info.update(gravity=ginfo, scale_check=sc, metric_scale_model=round(float(np.median(z["scale"][keep])), 3))
-    info.pop("live_s", None)  # timings belong in plan.timings, not in the (byte-identical) source block
     bundle.meta["recon"] = info
     rec.meta["warnings"] = warnings
     return bundle, rec
