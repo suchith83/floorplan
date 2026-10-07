@@ -99,3 +99,13 @@ def test_footprint_includes_air_the_sensor_saw_through():
     with_rays, o2 = _footprint(P, N, None, rays)
     col = lambda img, oo, x: img[int((x - oo[0]) / 0.02)].mean()
     assert col(without, o, 3.0) == 0 and col(with_rays, o2, 3.0) > 0.5
+
+
+def test_footprint_always_contains_the_camera_path():
+    floor = np.array([[x, y, 0.0] for x in np.linspace(0, 1, 21) for y in np.linspace(0, 1, 21)])
+    N = np.tile([0, 0, 1.0], (len(floor), 1))
+    P = np.vstack([floor, [[3.0, 1.0, 1.0]]])                          # a far point widens the grid
+    N = np.vstack([N, [[1.0, 0, 0]]])
+    cams = np.array([[0.5, 0.5, 1.4], [2.5, 0.5, 1.4]])                # walked on past the seen floor
+    img, o = _footprint(P, N, None, cams=cams)
+    assert img[int((2.2 - o[0]) / 0.02), int((0.5 - o[1]) / 0.02)]

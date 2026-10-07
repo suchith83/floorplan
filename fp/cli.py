@@ -120,6 +120,8 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
     from fp.report.debug import bev_png
     with _timed(timings, "ingest"):
         bundle = load_capture(capture, tier=tier, max_frames=max_frames)
+    for msg in bundle.meta.get("_warnings", []):
+        warn("ingest", msg)
     with _timed(timings, "recon"):
         bundle, rec, fstats = reconstruct(bundle, out, filter_frames, backend)
     plan["source"].update(n_frames=len(bundle.frames), frame_filter=fstats,
@@ -128,7 +130,8 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
         try:
             al = align(rec)
         except FloorNotFound as e:
-            warn("align", f"{e} Assuming the floor {ASSUMED_CAMERA_H} m below the camera.")
+            warn("align", f"{e} Assuming the floor {ASSUMED_CAMERA_H} m below the camera; every room below rests "
+                          "on that assumption, so treat its walls and area as rough, whatever their intervals say.")
             al = align(rec, assume_floor_below_camera=ASSUMED_CAMERA_H)
     T = al["T_plan_world"]
     P, N = to_plan(T, rec.points), rec.normals @ T[:3, :3].T
@@ -137,12 +140,15 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
                         f"{P[:, 2].max():.2f} m above the floor), so ceiling height is not observed.")
     with _timed(timings, "rooms"):
         rays = _plan_rays(rec, T)
-        rooms, conns, gdbg = extract_rooms(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays)
+        traj = bundle.meta.get("_trajectory")
+        cams = to_plan(T, traj[1]) if traj is not None else None
+        rooms, conns, gdbg = extract_rooms(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays, cams)
         wall_lines = gdbg["lines"]
         _labels_png(out / "debug" / "rooms_split.png", gdbg)
         if not rooms:
             warn("rooms", "Room split failed; the whole footprint is one room.")
-            rooms, conns = [extract_room(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays=rays)], []
+            rooms, conns = [extract_room(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays=rays,
+                                         cams=cams)], []
             rooms[0]["id"] = rooms[0]["name"] = "R1"
         rooms, conns = rank_rooms(rooms, conns, bundle, T, plan, warn)
         _name_rooms(rooms, bundle, T)
@@ -199,7 +205,7 @@ def rank_rooms(rooms, conns, bundle, T, plan, warn):
     for c in conns:
         c["rooms"] = sorted((new[c["rooms"][0]], new[c["rooms"][1]]), key=lambda i: int(i[1:]))
     plan["source"]["room_occupancy_s"] = {r["id"]: r["occupancy_s"] for r in order}
-    for r in order:
+    for r in order[1:]:   # R1 is the main room by definition, even on a capture too short to call it visited
         if r["occupancy_s"] < MIN_ROOM_VISIT_S:
             warn("rooms", f"{r['id']} is partially observed: the camera spent {r['occupancy_s']:.1f} s inside it "
                           f"(< {MIN_ROOM_VISIT_S:.0f} s), so it was seen mostly through a doorway; its walls and "

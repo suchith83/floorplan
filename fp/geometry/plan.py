@@ -5,7 +5,8 @@ Method (explainable, Manhattan):
  2. Room footprint = all horizontal surfaces (floor, counter/bed tops, ceiling) rasterised
     top-down: furniture hides the floor but its top surface is still inside the room. Plus, when the
     depth rays are given, every cell that several camera->point rays crossed: the sensor saw through
-    that air, so it is inside the room even where the camera never looked down at the floor.
+    that air, so it is inside the room even where the camera never looked down at the floor. And the
+    camera path itself (CAMERA_RADIUS around it): the person stood on floor inside the room.
  3. Grid of candidate wall lines -> cells; a cell is interior if the footprint covers it.
     Union of interior cells = rectilinear polygon whose edges sit exactly on wall planes.
  4. An edge with no wall evidence is kept but marked inferred (dashed, low confidence)."""
@@ -83,7 +84,10 @@ def _seen_through(rays, o, shape):
     return cnt
 
 
-def _footprint(P, N, H, rays=None):
+CAMERA_RADIUS = 0.3  # m: the phone is held ~0.3 m in front of the body; that floor is inside the room
+
+
+def _footprint(P, N, H, rays=None, cams=None):
     # Every horizontal surface between floor and ceiling is inside the room: floor, counter
     # tops, bed tops, cabinet undersides, ceiling. Floor alone under-estimates kitchens.
     top = (H + 0.1) if H else 2.6
@@ -95,6 +99,11 @@ def _footprint(P, N, H, rays=None):
     img[ij[:, 0], ij[:, 1]] = 1
     if rays is not None and len(rays[0]):
         img |= (_seen_through(rays, o, img.shape) >= MIN_RAY_HITS).astype(np.uint8)
+    if cams is not None and len(cams):
+        path = np.zeros(img.shape[::-1], np.uint8)
+        c = ((cams[:, :2] - o) / RES).astype(np.int32).reshape(-1, 1, 2)
+        cv2.polylines(path, [c], False, 1, 2 * int(CAMERA_RADIUS / RES))
+        img |= path.T
     img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
     img = ndimage.binary_fill_holes(img)
     lab, n = ndimage.label(img)
@@ -174,22 +183,22 @@ def length_confidence(source_prior: float, nb_a: dict, nb_b: dict) -> float:
     return round(source_prior * (0.3 + 0.7 * cov) * float(np.exp(-max(0.0, smear - SHARP_WALL) / SMEAR_SCALE)), 2)
 
 
-def extract_room(P, N, ceiling_h, voxel, source_prior, debug: dict | None = None, rays=None):
+def extract_room(P, N, ceiling_h, voxel, source_prior, debug: dict | None = None, rays=None, cams=None):
     """The whole footprint as ONE room (single-room scans, the laser eval, fp check).
     debug: if a dict is passed, intermediate results are stored in it."""
     lines = _wall_lines(P, N, ceiling_h, voxel)
-    fp, o = _footprint(P, N, ceiling_h, rays)
+    fp, o = _footprint(P, N, ceiling_h, rays, cams)
     if debug is not None:
         debug.update(lines=lines, footprint=fp, origin=o)
     return _room(fp, o, lines, ceiling_h, source_prior, debug)
 
 
-def extract_rooms(P, N, ceiling_h, voxel, source_prior, rays=None):
+def extract_rooms(P, N, ceiling_h, voxel, source_prior, rays=None, cams=None):
     """The whole floor: footprint split into rooms at doorways (fp/geometry/rooms.py), one polygon per
     room on the shared wall lines, and the doors between rooms. Returns (rooms, connections, debug)."""
     from fp.geometry.rooms import doors, split_rooms
     lines = _wall_lines(P, N, ceiling_h, voxel)
-    fp, o = _footprint(P, N, ceiling_h, rays)
+    fp, o = _footprint(P, N, ceiling_h, rays, cams)
     lab = split_rooms(fp, RES)
     rooms = []
     for k in range(1, lab.max() + 1):

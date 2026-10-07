@@ -82,6 +82,9 @@ def load(d: Path, cache_dir: Path | None = None) -> CaptureBundle:
         raise StageError("ingest", f"Stray Scanner capture {d} has no rgb.mp4.")
     cache = Path(cache_dir or DEFAULT_CACHE) / "stray" / d.name
     n_video = _cache_frames(d / "rgb.mp4", cache, len(od["t"]))
+    cap = cv2.VideoCapture(str(d / "rgb.mp4"))
+    n_in_file = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
     S = np.diag([RGB_SCALE, RGB_SCALE, 1.0])
     frames, missing = [], 0
     for k, i in enumerate(od["index"]):
@@ -96,7 +99,18 @@ def load(d: Path, cache_dir: Path | None = None) -> CaptureBundle:
     meta = {"dataset": "Stray Scanner", "capture": d.name, "odometry_rows": len(od["t"]),
             "video_frames": n_video, "frames_missing": missing,
             "duration_s": round(float(od["t"][-1] - od["t"][0]), 1) if len(dt) else 0.0,
-            "fps_median": round(float(1 / np.median(dt)), 1) if len(dt) else None,
+            "fps_nominal": round(float(1 / np.median(dt)), 1) if len(dt) else None,   # typical gap (60 fps)
+            "fps_mean": round(float(len(dt) / (od["t"][-1] - od["t"][0])), 1) if len(dt) else None,  # with gaps
             "has_confidence": all(f.confidence is not None for f in frames) and bool(frames)}
+    warnings = []
+    if n_in_file > len(od["t"]) + 1:
+        warnings.append(f"rgb.mp4 has {n_in_file} frames but odometry.csv only {len(od['t'])} poses: "
+                        f"{n_in_file - len(od['t'])} frames without a pose were ignored (truncated capture?).")
+    if missing:
+        warnings.append(f"{missing} poses had no decoded video frame or depth map and were skipped.")
+    if frames and not meta["has_confidence"]:
+        warnings.append("No confidence/ maps: every depth pixel was used, including low-confidence ones "
+                        "(edges, glass, far surfaces), so walls may be thicker.")
+    meta["_warnings"] = warnings
     # Stray (ARKit) world frame is gravity-aligned with +Y up.
     return CaptureBundle(source="lidar", frames=frames, up=np.array([0.0, 1.0, 0.0]), meta=meta)
