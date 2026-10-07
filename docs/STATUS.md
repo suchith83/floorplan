@@ -300,7 +300,46 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   - `place()` would give a large extent for a near full-image mask (filtered only by the detector's 25 % rule).
   - Timings: c7d2 total 162 s with damage (43 s); the earlier 226 s (04) was measured while other jobs ran.
   - Camera tiers: damage runs on model depth there (not evaluated; the confirmation step needs depth in the other frames).
-## 07 — Calibrated intervals and the benchmark harness: not started
+## 07 — Calibrated intervals and the benchmark harness: **done on sample data; own-capture/tape slots open (`data/own/` missing)**
+- **One command:** `make benchmark` (= `uv run python eval/run_benchmark.py --all`) runs all 7 sample plans (3 LiDAR, 2 video,
+  2 photos; MapAnything replayed from `out/_cache/recon`), fits the interval constants, reruns because they changed, and writes
+  `eval/BENCHMARK.md`, `eval/CALIBRATION.md`, `eval/benchmark.json`, `fp/calibration.json`. From a clean `out/` (only
+  `out/_cache` kept): **500 s** (two passes of ~220 s). `make benchmark-tables` rebuilds the tables from existing plans in ~3 s.
+  Own captures in `data/own/` (`photos_run1/`, `photos_run2/`, `video_run1.mp4`, `video_room_repeat.mp4`) are picked up
+  automatically and scored against `eval/ground_truth/<capture>.yaml` or `own.yaml`.
+- **Truth stand-ins** (D07.2): camera tiers vs the LiDAR plan of the same capture; LiDAR by the repeat pair; c7d2 openings by eye
+  (`eval/ground_truth/c7d28f72c6.openings_by_eye.yaml`). Rows that need tape are NOT SCORED and name the slot.
+- **Gates:** PASS 3 (drift ablation ×2, LiDAR calibration held-out), FAIL 13, NOT SCORED 10, NOT DONE 1 (head-to-head).
+  | gate | capture | number | result |
+  |---|---|---|---|
+  | openings (by eye, widths not taped) | c7d28f72c6 | 7/14 = 50 % (13 real, 1 phantom, 4 missed, 2 wrong kind) | FAIL |
+  | repeatability, wall-to-wall spans | 1a83 vs c7d2 | 0/16 within; median 5.5 cm; per-wall edges 1/23 | FAIL (unrepeatable) |
+  | video walls ±3 % | c00a / c7d2 video | p90 63 % / **105 %** | FAIL |
+  | video footprint ±3 % | c00a / c7d2 video | −12 % / **−79 %** (13.2 vs 62.6 m²) | FAIL |
+  | photo walls ±8 % | c00a / c7d2 photos | p90 24 % / 62 % | FAIL |
+  | photo stitch | c7d2 photos | 11.98 vs 68.47 m² (−82 %), 0 m² overlap, adjacency wrong (extra R2–R3) | FAIL |
+  | calibration held-out coverage, walls | lidar / video / photos | 94 % of 16 / 78 % of 9 / 67 % of 12 | PASS / FAIL / FAIL |
+  | LiDAR per-wall edges (stress set) | 1a83 vs c7d2 | 61 % of 23 covered | FAIL |
+- **Single worst gate: video wall lengths on `c7d28f72c6-video`: p90 |error| 105 % vs the 3 % gate (35× the threshold); 0 of 6
+  matched walls within ±3 %.** Same root cause as the #2 (c7d2 video footprint −79 %) and #4 (c7d2 photo stitch −82 %): on main
+  the camera-tier cloud is cut to fragments. Pre-merge (track/camera) the same c7d2 video replay gave one 82.2 m² room (IoU 0.66);
+  on main it gives 2 rooms, 13.2 m² (IoU 0.18). Suspects: 03's whole-flat stitch (walls cut back out of the footprint, doorways
+  closed along wall lines, room filter) and `MIN_RAY_HITS` (D05.9) applied to noisy learned depth. Not fixed here: that is 09.
+- **Calibration** (`fp/calibration.py`, D07.1): `half = k·a + b·value`, split conformal, never below provisional.
+  Fitted: LiDAR wall k = **1.42** (16 spans), area k = 5.6 (6 rooms, n < 9 → max); video wall b = **2.41**, area 0.57;
+  photos wall b = **3.12**, area 3.0. Camera-tier intervals are now ±240–310 % of a wall, i.e. "we don't know" (honest; in-sample the
+  reference now sits inside all of them, held-out 67–78 %; before, 17–67 %). Not calibrated (no evidence): ceilings, openings, damage extents.
+  `plan.intervals.calibrated` is true for every tier with a fit, and `method` names the stand-in evidence.
+- **Also:** `eval/gt.py` + `eval/match_gt.py` + `eval/ground_truth/TEMPLATE.yaml` (tape format, matcher by room name / wall
+  direction / length + override file, scorer; 11 tests). `eval/HEAD_TO_HEAD.md` (substitute protocol; LiDAR row not done).
+  Fixes: openings no longer scaled by the tier twice; `lo` clipped at 0; tests pinned to D5 (`tests/conftest.py`). **149 tests.**
+- **Timing per stage** is in BENCHMARK.md (c7d2 LiDAR 128 s: recon 68, openings 23, drift metrics 11, damage 10).
+- **Not done:** anything needing tape (wall/ceiling/opening widths at every tier, ceiling spread, own repeatability, the
+  staged-damage row, head-to-head); `eval/cross_tier_sample.md` (superseded by BENCHMARK.md's cross-tier table); A0 (convert
+  `ground_truth_raw.txt`): no file yet.
+- **What 08/09 need to know:** 09 should take the worst gate above (camera-tier footprint on main). After any fix, `make
+  benchmark` refits automatically; the camera-tier b will shrink only if the errors do. Old outputs from before 07 are in
+  `../out_pre07/` (outside the repo).
 ## 08 — Capture protocol, device matrix, README, report, compliance matrix: not started
 ## 09 — The fix loop: not started
 ## 10 — Cold-run rehearsal: not started

@@ -384,3 +384,64 @@ numbered D05.x so the merge doesn't clash. -->
   door and passage widths. Each [lo, hi] is pushed through the formula worst-case (lo uses length lo × height lo
   − openings hi).
 - **Evidence.** Test: wall 3.0 × 2.5 − 0.9 × 2.05 door = 5.655 m² with lo < value < hi; every surface_id validates.
+
+## D07.1. One interval model, half = k·a + b·value, constants fitted by split conformal
+- **Context.** D5's intervals were provisional. 07 must calibrate them per tier and measurement type without two
+  interval models, and with very little evidence.
+- **Options.** (a) Per-type quantile regression on several features; (b) keep D5's evidence term `a` (plane fit +
+  measured smear, ×3 inferred; jamb reveals; ceiling patch spread) and fit one multiplier per tier × type;
+  (c) a fixed % per tier.
+- **Choice.** (b), written as `half = k·a + b·value` (fp/calibration.py). LiDAR fits k (metric scale, b = 0);
+  camera tiers fit b with k = 1 (their error is scale/shape, not plane fit). The fit is split conformal: each
+  evidence row gives the factor its interval would have needed, and the constant is the ⌈(n+1)·0.9⌉-th smallest;
+  n < 9 → the largest (flagged); n < 3 → stays provisional. A fitted constant is never below its provisional
+  value (no tape, so we may widen but never narrow), and is rounded up. Constants live in the committed
+  `fp/calibration.json` (written by `make benchmark`); `fp run` reads them, records the k, b it used in
+  `plan.source.interval_model`, and sets `intervals.calibrated` + a method string that names the evidence.
+  Deleting the file returns to D5.
+- **Evidence.** One parameter per cell is all n = 3–16 can support. Held-out (2-fold) LiDAR wall coverage 88 % and
+  100 % (8 rows each); in-sample every set is covered (eval/CALIBRATION.md).
+
+## D07.2. What stands in for tape on the sample data
+- **Context.** No tape on the evaluator's captures; the user's own captures and tape don't exist yet (8 Oct).
+- **Choice.** LiDAR: the repeat pair 1a8384c3f6 / c7d28f72c6. Fit on **wall-to-wall spans** both scans found
+  (a wall length is the distance between two planes; 16 spans), charging the **whole** disagreement to each
+  scan (no ÷√2, conservative), and on matched room areas (6). The per-wall polygon edges (23) are a **stress
+  set**, checked but not fitted: they also move when the two scans split rooms at different doorways
+  (segmentation, not noise). Camera tiers: the video/photo plans against the LiDAR plan of the same capture, the
+  reference's own error charged to the camera tier. Folds: by capture for camera tiers; interleaved rows for
+  LiDAR (spans cluster in two rooms, so a split by room gave 14 vs 2).
+- **Evidence.** LiDAR span k = 1.42 (spans median |Δ| 5.5 cm); LiDAR area k = 5.6 (room splits differ); stress
+  set coverage 61 % (14/23): stated plainly as a known failure, not hidden. Repeatability shows precision only;
+  a bias shared by both scans is invisible without tape.
+
+## D07.3. Gate definitions where the brief is silent, and the "worst gate" ranking
+- **Context.** "Wall lengths within ±8 %" doesn't say for how many walls; calibration has no numeric gate.
+- **Choice.** A "within X" gate over many walls passes when ≥ 90 % are within X (the same 9 in 10 our intervals
+  state), i.e. p90 |error| ≤ X. Calibration passes at held-out coverage ≥ 80 % (with n ≈ 10, one miss in ten is
+  sampling noise around 90 %); this band is stated next to the number. Repeatability passes only if every span is
+  within 1 cm or 0.5 %. Worst gate = the failing gate furthest from its threshold in threshold units (p90 error ÷
+  tolerance, or required rate ÷ achieved rate). Gates without truth say NOT SCORED and name the slot.
+- **Evidence.** Worst gate: c7d2 video wall lengths, p90 105 % vs 3 % (35×). Every choice above is a constant in
+  eval/run_benchmark.py with a comment; none was moved after seeing a result.
+
+## D07.4. Openings scored from a by-eye label file
+- **Context.** 04's 50 % openings result was a one-off verifier count; 07 must regenerate every number.
+- **Choice.** `eval/ground_truth/c7d28f72c6.openings_by_eye.yaml` lists the 13 real openings (kind + centre in the
+  plan frame) the 04 verifier found in RGB frames; the benchmark matches plan openings within 0.6 m, kind must
+  agree, unmatched plan openings are phantoms. Widths can't be scored (no tape), so 7/14 = 50 % is an upper bound
+  on the gate number. In-sample: 04's rules were written on this capture.
+
+## D07.5. Head-to-head: substitute protocol, not done
+- **Context.** The brief's head-to-head is LiDAR tier vs an app on our rooms; the user has no LiDAR iPhone (the
+  recruiter approved skipping own LiDAR captures). Own captures and the app export don't exist yet.
+- **Choice.** eval/HEAD_TO_HEAD.md: LiDAR row "Not done (no iPhone Pro; recruiter-approved)"; substitute =
+  photo/video tier vs magicplan free tier on the same 2 taped rooms, beat-or-tie = our |err| ≤ app's + 0.5 cm,
+  labelled a substitute and pending own capture.
+
+## D07.6. Small contract fixes found while calibrating
+- Openings were multiplied by the tier scale twice (fp/geometry/openings.py and contract `_m`): camera-tier
+  opening intervals were 3×/6× too wide relative to the model. Now once.
+- `lo` is clipped at 0: every plan quantity is a length, area or count, and the fitted camera-tier intervals
+  (±241 % / ±312 % of a wall) would otherwise go negative.
+- `fp/calibration.json` makes unit tests depend on the last benchmark; tests/conftest.py pins them to D5.
