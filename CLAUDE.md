@@ -22,14 +22,16 @@ Under `data/stray/<id>/` (zips in `data/zips/`); `scripts/fetch_data.sh` will fe
 | `c7d28f72c6` | very likely the same flat with ceiling, 215 s, 9,745 frames, loops/revisits (drift work) |
 
 Stray Scanner format (checked):
-- `rgb.mp4`: 1920×1440 HEVC, 60 fps. Video frame *i* = row *i* of `odometry.csv` = `depth/{i:06d}.png`
+- `rgb.mp4`: 1920×1440 HEVC, nominally 60 fps but really ~46 fps with gaps: use `odometry.csv`
+  timestamps, never i/60. Video frame *i* = row *i* of `odometry.csv` = `depth/{i:06d}.png`
   = `confidence/{i:06d}.png`.
 - `depth/*.png`: 256×192 uint16, **millimetres**. `confidence/*.png`: values 0/1/2; keep 2 (maybe 1).
 - `odometry.csv`: `timestamp, frame, x, y, z, qx, qy, qz, qw, fx, fy, cx, cy, …` per frame.
   Pose = camera→world. **Camera axes are the OpenCV convention (x right, y down, z forward)**; the
   world is y-up (gravity-aligned). Verified: the ARKit convention (y up, −z forward) gives a smeared
   cloud, OpenCV gives sharp walls. Intrinsics are per frame at 1920×1440: scale by 256/1920 for depth.
-  `camera_matrix.csv` holds one 3×3 K (fx ≈ 1599.7, vs ≈ 1597.9 per-frame); prefer the per-frame values.
+  `camera_matrix.csv` holds one 3×3 K that differs from the per-frame values (c00a fx 1599.7 vs
+  1597.9; c7d2 1601.1 vs 1581.2), so use the per-frame values.
 - `imu.csv`: ~100 Hz `timestamp, a_x, a_y, a_z, alpha_x, alpha_y, alpha_z`.
 - Floor is ~1.45–1.5 m below the starting camera. In `c7d28f72c6` ceiling layers sit ~2.3–2.5 m
   above the floor, with another layer near 3.1 m (unverified).
@@ -66,8 +68,8 @@ uv run fp --help
 uv run fp run data/stray/c00a170fe1      # → out/c00a170fe1/{plan.json,plan.svg,report.html}
 uv run fp check <stage> <capture>        # frames|poses|fusion|cloud|align|walls|footprint|all|view
 ```
-The Stray Scanner reader arrives in work order 02; until then `fp run` only recognises
-video files, photo folders and ARKitScenes folders. The benchmark command arrives in work order 07.
+The Stray Scanner reader arrives in work order 02; until then `fp run` on a Stray folder exits with
+"reader not implemented" (`is_stray` in `fp/ingest/__init__.py`). The benchmark command arrives in work order 07.
 Add dependencies with `uv add`, never pip.
 
 ## Conventions
@@ -78,7 +80,8 @@ Add dependencies with `uv add`, never pip.
   tuning**, and never tune on evaluation data to make a gate pass.
 - Same `plan.json` schema for every tier; one CLI: `uv run fp run <capture>`.
 - Debug images go to `out/<capture>/debug/`; name every image you mention in STATUS/defense notes.
-- The live path runs on a laptop (CPU/MPS). GPU/Modal is optional behind `--backend`.
+- The live path must run on a laptop (CPU/MPS); GPU/Modal may only be an optional `--backend`.
+  Today MapAnything and SAM 3 run only on Modal (no `--backend` flag yet; work order 05).
 - Prefer numpy / scipy / open3d / opencv / shapely.
 
 ## Commits

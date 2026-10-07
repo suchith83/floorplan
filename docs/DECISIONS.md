@@ -24,7 +24,7 @@ One entry per real decision: context → options → choice → evidence. Newest
 - **Choice.** (a) uv with `requires-python = ">=3.12,<3.13"`. uv downloads 3.12 itself if the
   machine lacks it (this Mac has 3.14 system Python; uv fetched 3.12.12). Open3D wheels lag new
   Python releases, which is why we stay on 3.12 rather than 3.13+.
-- **Evidence.** `uv sync` built the env from the lockfile here and `uv run pytest -q` passes (13 tests).
+- **Evidence.** `uv sync` built the env from the lockfile here and `uv run pytest -q` passes (13 ported tests).
   The prototype was ported in three labelled commits rather than one lump, so the history shows
   what was reused; ARKitScenes ground-truth evaluation code (`eval/`) stayed behind, since the
   benchmark is rebuilt around our own captures in work order 07.
