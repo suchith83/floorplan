@@ -5,6 +5,8 @@ Turn a handheld iPhone capture (LiDAR via Stray Scanner, a video walkthrough, or
 into one whole-property plan: per-room walls, ceiling height, floor area, openings, adjacency,
 damage regions and scope line items, with an interval on every number. One command per capture,
 one JSON schema for every tier, and it runs cold on an evaluator's laptop (no calls to our cloud).
+The user has no iPhone. The recruiter said: skip own LiDAR captures, run the LiDAR tier on her sample
+data (`data/stray/`), and capture the photo and video tiers on the user's own phone.
 Brief: [docs/brief/applied_ai_brief.md](docs/brief/applied_ai_brief.md). Strategy and work orders:
 `planning/GAMEPLAN.md` and `prompts/` (work orders, `CHECKLIST.md`; local only, not committed).
 
