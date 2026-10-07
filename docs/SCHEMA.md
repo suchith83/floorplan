@@ -40,6 +40,12 @@ Every number is a Measure: `{value, lo, hi, unit, method, observed}`.
   Its interval should be wide.
 - `method` says in words how the number was made.
 
+**Wall `observed` vs wall `length.observed`.** `Wall.observed` says whether the wall's *own plane*
+was seen. `Wall.length.observed` says whether the two planes that *bound* the length were seen:
+a wall's length is the distance between its two neighbouring walls. So when one wall is inferred,
+its own length can still be measured (its neighbours were seen), while its two neighbours' lengths
+become uncertain. Room `floor_area` and `perimeter` are observed only if every wall was.
+
 Areas are m2, lengths are m. A scope item's `unit` must equal its `quantity.unit`.
 
 ## What "90% interval" promises

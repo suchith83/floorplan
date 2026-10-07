@@ -36,7 +36,36 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   `fp/damage/detect_modal.py`); `modal` is a hard dependency. The local backend is work order 05.
 - `fp/check.py` and the CLI help still talk about ARKitScenes; fine to reshape around Stray.
 
-## 01 — Output contract: schema, intervals, renderer: not started
+## 01 — Output contract: schema, intervals, renderer: **done**
+- **Schema 1.0** (`fp/schema.py`, `schema/plan.schema.json`, `docs/SCHEMA.md`): Pydantic v2, `extra="forbid"`.
+  `Measure{value, lo, hi, unit, method, observed}`; value null => observed false. Stable IDs `R1`, `R1.W1`,
+  `R1.O1`, `R1.floor`, `R1.ceiling`, `D1`, `C1`, `S1`; `validate()` rejects dangling references, NaN, CW
+  polygons, wrong units. Regenerate with `uv run python -m fp.schema` (a test fails if it's stale).
+- **Renderer** (`fp/report/svg.py`, `html.py`, `write_outputs`): magicplan-style plan (thick walls, dashed
+  inferred walls, door swings, double-line windows, `4.20 m ±0.05` labels, scale bar, +y arrow, legend);
+  one-file report.html with tier badge, all tables, evidence crops, warnings, drift, timings. Intervals
+  print rounded outward. Fixture render: `out/fixture/plan.svg` (verified visually, no overlaps).
+- **CLI**: `fp run <capture> [--tier] [--backend local|modal] [--no-drift-correction] [--no-cache]`,
+  `fp render <plan.json> --out DIR`. Always writes plan.json (validated), plan.svg, report.html, debug/.
+  Missing stages raise `StageNotBuilt`/`StageError` (fp/contract.py) -> warning + `observed: false`.
+- **Provisional intervals** (`fp/contract.py`, D5): plane position error = 1 cm × tier scale (1/3/6) +
+  wall-band thickness, ×3 if inferred; length = sum of its two neighbours' errors (+3%/8% for video/photos).
+  `intervals.calibrated = false` until 07.
+- Tests: 65 pass. Verifier: all acceptance checks pass; its findings (HEIC/zero-frame crash, traceback on
+  bad plans, fixture `length.observed` semantics) are fixed and tested.
+
+**What 02 needs to know**
+- Replace the `StageNotBuilt` in `load_capture` (fp/ingest/__init__.py) with the Stray reader; `fp run
+  data/stray/c00a170fe1` then flows through `_geometry` in fp/cli.py into `contract.fill_from_geometry`.
+- Geometry rooms must keep the legacy dict shape that `contract.room_to_schema` reads (`id, name, polygon
+  (CCW), walls[{id W<k>, p0, p1, length_m, observed, coverage, spread_cm}], area_m2, ceiling_h_m`), or
+  change room_to_schema with it. `extract_rooms`' `source_prior` arg is now unused (passed 1.0).
+- Debug images go to `out/<capture>/debug/` (bev.png is written there now).
+- Doorway "openings" are still floor-mask necks: width marked `observed: false`, ±10 cm (04 replaces).
+- Damage only runs with `--backend modal` (old SAM 3 path, converted by `contract.damage_to_schema`);
+  locally it's a warning (06).
+- Known gaps: pydantic reports field errors before cross-reference errors (two passes); photos.load still
+  ignores HEIC and writes its cache to ./out/_cache (05).
 ## 02 — LiDAR tier: Stray Scanner ingest and single room end to end: not started
 ## 03 — Drift accountability and the stitched whole-property plan (LiDAR): not started
 ## 04 — Openings (doors, windows, passages) and per-room ceiling height: not started

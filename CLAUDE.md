@@ -66,15 +66,21 @@ uv sync                                  # Python 3.12 env from uv.lock
 uv run pytest -q                         # unit tests
 uv run fp --help
 uv run fp run data/stray/c00a170fe1      # → out/c00a170fe1/{plan.json,plan.svg,report.html}
+uv run fp run <capture> --tier video --backend modal   # tier override; Modal is opt-in (paid)
+uv run fp render <plan.json> --out DIR   # re-render plan.svg + report.html from a plan
+uv run python -m fp.schema               # regenerate schema/plan.schema.json after editing fp/schema.py
 uv run fp check <stage> <capture>        # frames|poses|fusion|cloud|align|walls|footprint|all|view
 ```
-The Stray Scanner reader arrives in work order 02; until then `fp run` on a Stray folder exits with
-"reader not implemented" (`is_stray` in `fp/ingest/__init__.py`). The benchmark command arrives in work order 07.
+Until a stage exists it raises `StageNotBuilt` (fp/contract.py) and `fp run` still writes a valid plan
+with a warning: the Stray reader arrives in 02, drift in 03, local MapAnything in 05, local damage in 06. The benchmark command arrives in work order 07.
 Add dependencies with `uv add`, never pip.
 
 ## Conventions
-- **Measurements** are `{"value", "lo", "hi"}` (metres unless stated) plus a `method` string.
-  Intervals must be honest; "not observed" beats a confident guess.
+- **Measurements** are `Measure{value, lo, hi, unit, method, observed}` (fp/schema.py, docs/SCHEMA.md);
+  `[lo, hi]` is a stated 90% interval. Value null => observed false; "not observed" beats a guess.
+  Build them with `fp.contract.measure()`; provisional interval constants live in fp/contract.py.
+- **Surface IDs** are stable: `R1`, `R1.W1`, `R1.O1`, `R1.floor`, `R1.ceiling`, `D1`, `C1`, `S1`.
+  Damage, scope and openings key off them; `fp.schema.validate` rejects dangling references.
 - **Plan frame**: z up, floor at z = 0, metres, x/y aligned to the dominant (Manhattan) wall axes.
 - **Thresholds** are module-level constants with a comment explaining the value. **No per-capture
   tuning**, and never tune on evaluation data to make a gate pass.
