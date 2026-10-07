@@ -184,8 +184,12 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   positions still unregistered across sweeps/rooms (RMS 3.0 m on a 3.1 m spread).
 
 **Not done / known problems**
-- **c7d2 video run** was still running at merge time (240 keyframes, 13 passes); its numbers and
-  `eval/cross_tier_sample.md` are not written yet.
+- **c7d2 video** (finished just after the merge, pre-merge code): 240 keyframes, 13 passes, **511 s live**, 14.3 GB peak.
+  Chunk scales 0.91-1.05 (no drift), metric vote 1.19, camera 1.43 m above floor (LiDAR ~1.49). But **one merged room**:
+  82.2 m² vs the reference's 73.3 m² footprint (+12 %), footprint IoU 0.66, adjacency not recovered, ceiling 3.60 m
+  (reference 3.08; the scale prior widened intervals 11 %). 11 of 12 chunk merges warn (0.27-1.45 m disagreement):
+  pose noise between chunks blurs the doorways, so the watershed split finds no necks.
+- `eval/cross_tier_sample.md` not written yet (numbers above come from `eval/cross_tier.py`).
 - Acceptance "photos: one stitched plan, correct adjacency, no overlaps": **not met**. No overlaps (0 m²), but rooms are
   undersized and adjacency is wrong. Two causes: (1) the footprint rule needs rays from >= 3 frames (`MIN_RAY_HITS`,
   fp/geometry/plan.py), which 7-17 photos rarely give (c00a: 0.8 m² vs 9.0 m² from >= 1 photo), and room folders are not used
