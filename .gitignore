@@ -1,0 +1,14 @@
+# Sample captures and their zips live under data/ and are fetched by scripts/fetch_data.sh, never committed.
+data/
+*.zip
+# Pipeline outputs and caches
+out/
+*.npz
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+.env
+# Private planning notes for the build sessions (not part of the submission)
+planning/
