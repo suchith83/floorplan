@@ -151,7 +151,56 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   `opening_id: null`). Ceiling is one flat-wide value (2.44 m on c7d2); per-room ceilings are 04. If 07 shows
   span accuracy matters more than double walls, try a per-room refinement after correction (D13).
   (The old subagent worktree from 03 is removed.)
-## 04 — Openings (doors, windows, passages) and per-room ceiling height: not started
+## 04 — Openings (doors, windows, passages) and per-room ceiling height: **done; ceilings pass, openings gate not met (50 % vs 85 %, by eye)**
+- **B. Ceiling** (`fp/geometry/ceiling.py`, D04.5): per room, largest down-facing layer ≥ 1 m² 2.1–3.6 m above the
+  room's own floor; value = medians' difference; half = 1 cm + 1.645 √(σc²/patches + σf²/patches) (25 cm patches),
+  +3 cm if the room's floor wasn't seen. Other layers -> `ceiling` warnings ("multi-level ceiling").
+  **c7d28f72c6:** R1 2.47, R2 2.45, **R3 3.09, R4 3.04**, R5 2.38, R7 2.33 (plan floor, ±4 cm), R8 2.45, R9 2.49 m;
+  R6 (balcony, never entered) not observed with a reason; R1 and R8 warn of a 3.05–3.08 m layer (R1 merges the hall
+  with the high-ceiling dining area). The verifier found R3/R4 at ~3.05 m plausible (normal high ceiling; hall,
+  corridor and bathrooms have dropped soffits). **1a8384c3f6 and c00a170fe1: every room not observed**, as required.
+  Repeatability across 1a83/c7d2 can't be scored (1a83 has no ceiling); waits for own repeat captures (07).
+- **A. Openings** (`fp/geometry/openings.py`, D04.1–D04.4, D04.6): per wall an elevation grid (2 cm cells) where each
+  depth ray votes wall / seen-through / (nothing = unobserved), frames counted not rays; regions classified door
+  (floor, 0.6–1.6 m, lintel 1.9–2.4 m, or no lintel seen but seen through ≥ 1.2 m), window (sill 0.3–1.5 m),
+  passage (> 1.6 m or no lintel, room behind). Width = jamb planes from reveal points (wall-end percentile
+  fallback). Mirror test (reflected points land on the room) and recess test (surface < 40 cm behind); a
+  door-shaped recess with a lintel = closed door. One opening seen from both rooms is listed once. 03's floor necks
+  remain only between rooms no measured opening links (warned).
+  | capture | openings | doors / windows / passages | openings s (+ RGB sheets) | total s |
+  |---|---|---|---|---|
+  | c7d28f72c6 | 10 | 5 / 1 / 4 | 44.2 (+10.5) | 226 |
+  | 1a8384c3f6 | 12 | 8 / 1 / 3 | 22.7 (+6.7) | 102 |
+  | c00a170fe1 | 2 | 1 / 0 / 1 | 3.1 (+0.4) | 23 |
+  c7d2 doors: R1.O1 0.904 m (lintel 2.08), R1.O2 0.905, R7.O1 0.893, R9.O1 0.713, R2.O2 0.915 (closed). Width
+  half-widths 3–12 cm (provisional). **Width accuracy vs ±2 cm cannot be checked: no tape on the sample data.**
+- **Verification by eye** (verifier subagent, RGB 5 frames per opening, `debug/openings/walls_R*.jpg` for misses),
+  c7d28f72c6. First pass 12 found: 6 correct, 3 phantoms, 3 wrong kind, 4 misses = **38 %**. Fixed (D04.6): closed
+  door needs a lintel; an opening must fit its wall; mirror sample fixed; sheets skip occluded boxes. After: 10 found,
+  **7 correct, 1 phantom** (vanity mirror, mirror score 0.30 < 0.5: threshold not lowered, real doors score to 0.38),
+  **2 wrong kind** (glazed balcony slider R4.O1 and office door R8.O1 called passages), **4 misses** (R5.W2 tall
+  narrow window, sill 0.15 m: no rule; R1.W5 and R3.W6 curtained windows; R2.W4 closed door seen only above 1.35 m)
+  = **7/14 = 50 %** (in-sample: rules came from this capture). 1a83 spot check (6 of 14, before the fixes): 2 good;
+  phantoms there were a standing mirror (R2.O4 window 0.42, still present), a sofa-backed "window" and a vanity
+  "closed door" (both now rejected). c00a: R2.O1 door 0.92 correct; its toilet-niche "closed door" is now rejected.
+  Adversarial (verifier): zeroed depth -> 0 openings; walls moved/rotated -> no new openings, except a wall moved
+  30 cm in gave a "closed door" (fixed by the lintel rule).
+- Tests: `tests/test_ceiling.py` (8), `tests/test_openings.py` (7: rendered depth of a two-room scene: door 0.90 m
+  within 2 cm, window, closed door vs niche, wardrobe = unobserved, mirror test, schema, dedupe). **121 pass.**
+- Debug images (per capture): `debug/openings/<wall_id>.png` (elevation as seen from inside: white unobserved,
+  grey wall, blue seen through; boxes red door / blue window / green passage / orange rejected) for every wall with
+  an opening or a candidate; `debug/openings/<opening_id>_frames.jpg` (5 RGB frames, opening projected; some have
+  only 1–2 frames when few frames see it unoccluded); `debug/openings/walls_<room>.jpg` (2 frames per wall).
+- **Known problems / what 05+ need to know**
+  - Openings gate (≥ 85 %) not met. Biggest remaining causes: windows behind curtains (no see-through rays); low-sill
+    narrow windows (no rule between 0.05 and 0.3 m sill); wide glazed doors and doors with an unseen lintel
+    called passages; mirrors at oblique angles (mirror score 0.3–0.5). An RGB check (door leaf/handle/glass) is the
+    obvious next step if 09 has time.
+  - `plan.svg`: opening labels crowd around small rooms (R7–R9 on c7d2).
+  - Camera tiers: `fp run` runs openings on their predicted depth too (no confidence map -> all treated as
+    confident); not evaluated. Photos give too few frames to reach MIN_FRAMES = 2 in most cells.
+  - `debug/rooms_split.png` still shows the watershed before the room filter (03 note, not redrawn).
+  - fp run on c7d2 grew 195 -> 226 s (openings 44 s + sheets 10 s).
 ## 05 — Video and photo tiers (no depth, no poses): **runs end to end; accuracy weak, photo-tier gates not met** (worktree ../floorplan-cam, branch track/camera, merged 7 Oct)
 **Built**
 - **Ingest** (`fp/ingest/photos.py`, `video.py`, `media.py`): HEIC (pillow-heif), EXIF rotation, P3 -> sRGB, EXIF 35 mm focal ->

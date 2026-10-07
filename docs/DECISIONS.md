@@ -291,14 +291,15 @@ numbered D05.x so the merge doesn't clash. -->
 ## D04.3. Mirror and recess tests; a door-shaped recess is a closed door
 - **Context.** A mirror makes the sensor "see" a room behind the wall; a niche or recessed panel is seen
   > 5 cm behind the plane. Both look like openings to (D04.1). RGB sheets on c7d28f72c6 showed a bathroom mirror
-  (R7.W6, "window" 1.64 m) and a recessed panel at the corridor end (R2.W4, "window" 0.90 m).
+  (R7.W6, "window" 1.64 m) and a closed door at the corridor end seen only above 1.35 m (R2.W4, "window" 0.90 m;
+  first read as a recessed panel, corrected by the verifier: handle and casing visible at t = 65838.5).
 - **Options.** (a) accept them; (b) RGB classifier; (c) geometry: mirror = reflect the points behind the gap
   back across the plane, and if ≥ 50 % land within 3 cm of the room's own surfaces it is the room again;
   recess = a room-facing surface < 40 cm behind the plane over ≥ 50 % of the gap.
 - **Choice.** (c). A recess with a door's shape is kept as a **closed door** (its leaf sits back in the frame):
   R2.W5 on c7d28f72c6 was rejected as a recess until the RGB sheet showed the handle.
 - **Evidence.** c7d28f72c6: the mirror scores only 0.48 (real doors 0.09–0.37), so it is caught by the recess
-  test (0.92), not the mirror test; c00a170fe1 R3.W4 mirror 0.98; the recessed panel 1.00. Mirror threshold
+  test (0.92), not the mirror test; c00a170fe1 R3.W4 mirror 0.98; R2.W4 recess 1.00 (a closed door, so a miss). Mirror threshold
   not tuned to these numbers (0.5 = "most of it"). Known limit: a leaf < 5 cm behind the face is "wall" (HIT_TOL).
 
 ## D04.4. A door whose top was never seen
@@ -317,3 +318,20 @@ numbered D05.x so the merge doesn't clash. -->
   correlated within a patch, so points are not independent samples). Other layers → `ceiling` warnings.
 - **Evidence.** 1.8 m admits kitchen cabinet undersides (round 1 picked 1.86 m). c7d28f72c6: 2.33–2.49 m in
   6 rooms, 3.04 / 3.09 m in R3 / R4, R6 not observed; 1a8384c3f6 and c00a170fe1: every room not observed.
+
+## D04.6. Fixes from verification; the openings gate is not met
+- **Context.** The verifier checked every c7d28f72c6 opening in 5 RGB frames: 6/12 correct, 3 phantoms (a
+  fridge front read as a 2.43 m window on a 1.87 m wall, the vanity mirror, a toilet niche read as a closed
+  door), 3 real but wrong kind, 4 misses (proxy correct / (detected + misses) = 38 % vs the 85 % gate).
+- **Options.** Lower the mirror threshold to 0.3 (it would catch the vanity mirror at 0.30, but real doors
+  score up to 0.38: tuning on the evaluation capture, rejected); add rules that follow from what an opening is.
+- **Choice.** (1) A door-shaped recess is a closed door only if a lintel was seen above it (a leaf in a frame
+  has wall above; a niche need not). (2) An opening wider than its own wall + 10 cm is not a hole in that
+  wall: a window there is rejected; a door-wide gap without a lintel becomes a passage if a room is behind it.
+  (3) The mirror test's random sample is fixed per candidate. (4) The RGB sheets skip boxes hidden behind a
+  nearer surface in that frame.
+- **Evidence.** c7d28f72c6 after: 10 openings, 7 correct, 1 phantom (vanity mirror, 0.30), 2 wrong kind
+  (a glazed balcony slider and the office door called passages), 4 misses (a tall narrow window with a
+  0.15 m sill that no rule covers, two curtained windows, the corridor-end closed door) = **50 %**, still
+  below 85 %. These rules were found on the same capture they are scored on, so 50 % is in-sample (optimistic).
+  The adversarial case (a wall line moved 30 cm into c00a's room) no longer produces a closed door.
