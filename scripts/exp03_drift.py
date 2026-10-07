@@ -49,7 +49,7 @@ def main():
     ap.add_argument("capture", type=Path)
     ap.add_argument("--cache", type=Path, default=Path("out/_cache"))
     ap.add_argument("--out", type=Path, default=None)
-    ap.add_argument("--variants", default="off,posegraph,plane,posegraph+plane")
+    ap.add_argument("--variants", default="off,posegraph-step,posegraph,plane")
     a = ap.parse_args()
     out = a.out or Path("out") / a.capture.name / "debug"
     out.mkdir(parents=True, exist_ok=True)
@@ -61,7 +61,8 @@ def main():
         if v == "off":
             fr = frames
         else:
-            r = correct_drift(frames, b.up, method=v)
+            # "<method>-step": one rigid correction per submap instead of the default blend in time
+            r = correct_drift(frames, b.up, method=v.removesuffix("-step"), smooth=not v.endswith("-step"))
             fr, m = r.frames, r.metrics
             print(f"[{v}] {r.method}")
             for l in r.loops:

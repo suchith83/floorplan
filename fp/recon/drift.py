@@ -94,6 +94,8 @@ class DriftResult:
     corrections: np.ndarray
     metrics: dict = field(default_factory=dict)
     loops: list[dict] = field(default_factory=list)
+    up: np.ndarray = field(default_factory=lambda: np.array([0, 1.0, 0]))
+    smooth: bool = True       # corrections blended in time between submap centres (False: one step per submap)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -464,8 +466,12 @@ def _moved(s: Submap, C) -> Submap:
                                cams=s.cams @ C[:3, :3].T + C[:3, 3])
 
 
-def correct_drift(frames: list[Frame], up=np.array([0, 1.0, 0]), method: str = "posegraph") -> DriftResult:
-    """Frames with ARKit poses -> copies with drift-corrected T_wc (inputs untouched)."""
+def correct_drift(frames: list[Frame], up=np.array([0, 1.0, 0]), method: str = "posegraph",
+                  smooth: bool = True) -> DriftResult:
+    """Frames with ARKit poses -> copies with drift-corrected T_wc (inputs untouched).
+    smooth: drift grows continuously with time, so each frame gets a blend of the corrections of the two submaps
+    whose centres (in time) bracket it, not the step of its own submap. A room scanned across a submap boundary
+    then keeps its own shape instead of being torn by the jump between two submap corrections."""
     if method not in METHODS:
         raise ValueError(f"unknown drift method {method!r}")
     t0 = time.perf_counter()
@@ -529,25 +535,51 @@ def correct_drift(frames: list[Frame], up=np.array([0, 1.0, 0]), method: str = "
         rots.append(_rot_deg(C[k][:3, :3]))
     metrics["max_correction_cm"] = round(max(moves), 2)
     metrics["max_correction_deg"] = round(max(rots), 3)
-    out = []
-    for f, k in zip(frames, idx):
-        out.append(dataclasses.replace(f, T_wc=C[k] @ f.T_wc))
+    res = DriftResult(frames=[], method=desc + ("; corrections blended in time between submap centres"
+                                                if smooth and n_sub > 1 else ""),
+                      submap_of_frame=idx, submap_t=submap_t, corrections=C, metrics=metrics, loops=loops,
+                      up=up, smooth=smooth)
+    Tc = correct_poses(res, ts, np.array([f.T_wc for f in frames])) if n else []
+    res.frames = [dataclasses.replace(f, T_wc=T) for f, T in zip(frames, Tc)]
     metrics["seconds"] = round(time.perf_counter() - t0, 2)
-    return DriftResult(frames=out, method=desc, submap_of_frame=idx, submap_t=submap_t, corrections=C,
-                       metrics=metrics, loops=loops)
+    return res
 
 
 def correct_poses(result: DriftResult, t: np.ndarray, T_wc: np.ndarray) -> np.ndarray:
-    """Apply the correction of the submap whose time range holds each timestamp (the nearest submap in time
-    otherwise) to any pose array, e.g. the full unfiltered camera path. T_wc: (n,4,4) -> (n,4,4)."""
+    """Apply the drift correction to any pose array, e.g. the full unfiltered camera path. T_wc: (n,4,4) -> (n,4,4).
+    Smooth: blend the two submaps whose time centres bracket t (camera position and yaw interpolated linearly;
+    before the first / after the last centre, that submap's own correction). Step: the correction of the submap
+    whose time range holds t (the nearest submap in time otherwise)."""
     t = np.asarray(t, float)
     T_wc = np.asarray(T_wc, float)
     if len(result.corrections) == 0 or len(t) == 0:
         return T_wc.copy()
+    if result.smooth and len(result.corrections) > 1:
+        return np.einsum("nij,njk->nik", _blended_corrections(result, t, T_wc[:, :3, 3]), T_wc)
     s = result.submap_t
     gap = np.maximum(s[None, :, 0] - t[:, None], 0) + np.maximum(t[:, None] - s[None, :, 1], 0)
     k = np.argmin(gap, axis=1)   # 0 inside a submap's range; ties go to the earlier submap
     return result.corrections[k] @ T_wc
+
+
+def _blended_corrections(result: DriftResult, t: np.ndarray, p: np.ndarray) -> np.ndarray:
+    """Per pose: a yaw-about-up correction that sends camera position p to the time-weighted mix of where its two
+    bracketing submaps' corrections send it, with the yaw interpolated the same way. Exact at submap centres."""
+    C, up = result.corrections, _unit(result.up)
+    mids = result.submap_t.mean(1)
+    yaw = np.unwrap([_yaw_of(c[:3, :3], up) for c in C])
+    j = np.searchsorted(mids, t)
+    a, b = np.clip(j - 1, 0, len(C) - 1), np.clip(j, 0, len(C) - 1)
+    span = mids[b] - mids[a]
+    w = np.where(span > 0, (t - mids[a]) / np.where(span > 0, span, 1), 0.0)[:, None]
+    pa = np.einsum("nij,nj->ni", C[a][:, :3, :3], p) + C[a][:, :3, 3]
+    pb = np.einsum("nij,nj->ni", C[b][:, :3, :3], p) + C[b][:, :3, 3]
+    target = (1 - w) * pa + w * pb
+    out = np.repeat(np.eye(4)[None], len(t), 0)
+    for n, th in enumerate((1 - w[:, 0]) * yaw[a] + w[:, 0] * yaw[b]):
+        out[n, :3, :3] = _rot_about(up, th)
+    out[:, :3, 3] = target - np.einsum("nij,nj->ni", out[:, :3, :3], p)
+    return out
 
 
 # ------------------------------------------------------------------------------------------------

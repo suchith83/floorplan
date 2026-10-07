@@ -151,8 +151,19 @@ def test_one_submap_and_correct_poses(tmp_path: Path):
     # correct_poses picks the submap containing each time, or the nearest one
     r.submap_t = np.array([[0.0, 1.0], [2.0, 3.0]])
     r.corrections = np.stack([np.eye(4), _T(0, [1, 0, 0])])
-    out = drift.correct_poses(r, np.array([0.5, 1.2, 1.9, 5.0]), np.repeat(np.eye(4)[None], 4, 0))
-    assert list(out[:, 0, 3]) == [0, 0, 1, 1]
+    t, I = np.array([0.5, 1.2, 1.9, 5.0]), np.repeat(np.eye(4)[None], 4, 0)
+    r.smooth = False
+    assert list(drift.correct_poses(r, t, I)[:, 0, 3]) == [0, 0, 1, 1]
+    # smooth (default): linear between the submap centres 0.5 s and 2.5 s, held beyond them
+    r.smooth = True
+    assert np.allclose(drift.correct_poses(r, t, I)[:, 0, 3], [0, 0.35, 0.7, 1])
+    # a yaw correction blends too: halfway between 0 and 2 deg is 1 deg, and the camera lands halfway
+    r.corrections = np.stack([np.eye(4), _T(2.0, [0, 0, 0])])
+    P = np.repeat(np.eye(4)[None], 1, 0)
+    P[0, :3, 3] = [3.0, 1.4, 0.0]
+    out = drift.correct_poses(r, np.array([1.5]), P)[0]
+    assert abs(np.degrees(drift._yaw_of(out[:3, :3], UP)) - 1.0) < 1e-6
+    assert np.allclose(out[:3, 3], 0.5 * (P[0, :3, 3] + _T(2.0, [0, 0, 0])[:3, :3] @ P[0, :3, 3]))
 
 
 def _face(x, sign, y0=0.0, length=3.0, voxel=0.01):
