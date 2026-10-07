@@ -65,6 +65,7 @@ RECESS_DEPTH = 0.40  # m: a surface facing the room this close behind the plane 
 RECESS_FRAC = 0.5    # ...covering >= half the opening's cells: a recess, not an opening -- unless it has a door's
                      # shape: then it is a closed door, its leaf set back 3-5 cm in the frame (seen on c7d28f72c6)
 PARTNER_DIST = 0.40  # m: an opening on a parallel wall this close is the same opening seen from the other room
+WALL_FIT_TOL = 0.10  # m: an opening wider than its own wall + 10 cm is not in that wall (verifier, c7d28f72c6 R3.W1)
 SAME_PAIR_DIST = 1.0  # m: two openings between the same two rooms closer than this are one (a doorway at a corner
                       # is cut by both rooms' wall lines; real double doors between two rooms are rarer than that)
 PROBE = (0.05, 0.7)  # m: walk this far out from an opening to find the room behind it
@@ -233,7 +234,7 @@ def _jamb(P, N, w, u_edge, side, zlo, zhi, voxel):
     return float(u_edge), CELL * 2, 0, "region edge"
 
 
-def behind_tests(P, N, tree, w, u0, u1, z0, z1, rng=np.random.default_rng(0)):
+def behind_tests(P, N, tree, w, u0, u1, z0, z1):
     """(mirror fraction, recess fraction) for a candidate opening on wall w spanning [u0, u1] x [z0, z1].
     Mirror: a mirror makes the depth sensor 'see' a copy of the room behind the wall. Reflect the points
     behind the opening back across the wall plane; for a mirror most land on surfaces of the room itself.
@@ -244,6 +245,7 @@ def behind_tests(P, N, tree, w, u0, u1, z0, z1, rng=np.random.default_rng(0)):
     near = (u > u0 - 0.5) & (u < u1 + 0.5)
     beh = near & (s > MIRROR_BEHIND[0]) & (s < MIRROR_BEHIND[1])
     idx = np.nonzero(beh)[0]
+    rng = np.random.default_rng(0)                   # same sample for the same candidate, whatever ran before
     mirror = 0.0
     if len(idx) >= 50:
         idx = rng.choice(idx, min(len(idx), 4000), replace=False)
@@ -298,6 +300,8 @@ def detect(rooms, frames, T, P, N, voxel: float, ceilings: dict | None = None, d
             jr = _jamb(P, N, w, ue1, +1, zlo, zhi, voxel)
             width = jr[0] - jl[0]
             kind = _classify(r, width, H)
+            if kind == "door" and r["head"] is None and width > w["L"] + WALL_FIT_TOL:
+                kind = "passage"            # wider than its wall and no lintel: an open-plan gap, not a door
             cxy = w["p0"] + w["u"] * 0.5 * (jl[0] + jr[0])
             top = r["head"] if r["head"] is not None else r["top"]
             mirror, recess = behind_tests(P, N, tree, w, jl[0], jr[0], r["sill"], top) if kind else (0.0, 0.0)
@@ -312,6 +316,11 @@ def detect(rooms, frames, T, P, N, voxel: float, ceilings: dict | None = None, d
                 why = "no jamb on either side: air beside a wall, not a hole in it"
             elif mirror >= MIRROR_FRAC:
                 why = f"mirror: {100 * mirror:.0f} % of what was seen behind it is the room itself, reflected"
+            elif width > w["L"] + WALL_FIT_TOL and (kind == "window" or behind is None):
+                why = (f"{width:.2f} m wide on a {w['L']:.2f} m wall: the wall line is wrong here (seen through "
+                       "past its ends), not a hole in it")
+            elif recess >= RECESS_FRAC and kind == "door" and r["head"] is None:
+                why = "door-shaped recess with no lintel seen: a niche, not a closed door in its frame"
             elif recess >= RECESS_FRAC and kind == "door":
                 cand["closed"] = True                     # a door leaf set back in its frame: a closed door
             elif recess >= RECESS_FRAC:
@@ -496,6 +505,20 @@ def _views(frames, T, X, n_wall, k=SHEET_FRAMES):
     return [frames[i] for i, _ in sorted(out, key=lambda x: x[1])]
 
 
+def _visible(f, T, X, tol=0.3):
+    """Is plan point X in front of the camera and not hidden behind a nearer surface in this frame's depth?"""
+    uv, z = _project(f, T, X[None])
+    if z[0] <= 0.1 or f.depth is None:
+        return z[0] > 0.1
+    D = cv2.imread(str(f.depth), cv2.IMREAD_UNCHANGED)
+    h, w = cv2.imread(str(f.rgb)).shape[:2]
+    i, j = int(uv[0, 1] * D.shape[0] / h), int(uv[0, 0] * D.shape[1] / w)
+    if not (0 <= i < D.shape[0] and 0 <= j < D.shape[1]):
+        return True                                  # outside the image: the box is clipped anyway
+    d = D[i, j] / 1000.0
+    return not (0 < d < z[0] - tol)
+
+
 def _upright(img, f, T, X):
     """Rotate a frame by a multiple of 90 deg so that plan down (-z) at X points down in the image
     (Stray stores frames in the sensor's landscape orientation)."""
@@ -559,6 +582,8 @@ def evidence_sheets(d: Path, openings: list[dict], walls_by_room: dict, frames, 
                 img = cv2.imread(str(f.rgb))
                 _draw_box(img, f, T, w["p0"], w["u"], 0, w["L"], 0.0, 2.3, (0, 220, 255), w["id"])
                 for o in openings:
+                    if not _visible(f, T, np.array([*o["center"], 0.5 * (o["z"][0] + o["z"][1])])):
+                        continue                    # hidden behind a wall in this frame: don't draw it
                     if o["wall_id"] == w["id"] or (o["rooms"] and w["room"] in o["rooms"]):
                         uo, co = np.array(o["u"]), np.array(o["center"])
                         ww = o["width"]["value"]
