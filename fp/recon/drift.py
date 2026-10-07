@@ -82,6 +82,7 @@ DOUBLE_MIN_OVERLAP = 0.5   # m: the two faces must run side by side for at least
 DOUBLE_DIP = 0.5           # the histogram between the two peaks must drop below half the weaker one (two surfaces)
 DOUBLE_FACE_TOL = 0.02     # m: points within 2 cm of a peak belong to that face
 OVERLAP_BIN = 0.10         # m: along-wall occupancy cells used to measure the overlap
+OVERLAP_MAX_GAP_BINS = 1   # a run of shared cells may skip one 10 cm cell (a socket, a shadow) and stay one double
 
 
 @dataclass
@@ -588,13 +589,19 @@ def wall_quality(P: np.ndarray, N: np.ndarray, voxel: float) -> dict:
                 if hs[a:b + 1].min() > DOUBLE_DIP * min(hs[a], hs[b]):
                     continue
                 fa, fb = np.abs(v - c[a]) <= DOUBLE_FACE_TOL, np.abs(v - c[b]) <= DOUBLE_FACE_TOL
-                both = _occupancy(w[fa], wlo) & _occupancy(w[fb], wlo)
-                ov = len(both) * OVERLAP_BIN
-                if ov >= DOUBLE_MIN_OVERLAP:
-                    doubles.append({"axis": ax, "coord_a": round(float(c[a]), 3), "coord_b": round(float(c[b]), 3),
-                                    "gap_cm": round(float(gap) * 100, 1), "overlap_m": round(ov, 2), "faces": sign,
-                                    # extent along the wall (other plan axis) where both faces are present
-                                    "lo": round(float(wlo + min(both) * OVERLAP_BIN), 2),
-                                    "hi": round(float(wlo + (max(both) + 1) * OVERLAP_BIN), 2)})
+                both = np.array(sorted(_occupancy(w[fa], wlo) & _occupancy(w[fb], wlo)))
+                if not len(both):
+                    continue
+                # side by side = one continuous stretch: two unrelated walls that merely share a coordinate
+                # elsewhere in the flat are not a double. Each run is one double wall.
+                for run in np.split(both, np.flatnonzero(np.diff(both) > OVERLAP_MAX_GAP_BINS + 1) + 1):
+                    ov = (run[-1] - run[0] + 1) * OVERLAP_BIN
+                    if ov >= DOUBLE_MIN_OVERLAP:
+                        doubles.append({"axis": ax, "coord_a": round(float(c[a]), 3), "coord_b": round(float(c[b]), 3),
+                                        "gap_cm": round(float(gap) * 100, 1), "overlap_m": round(float(ov), 2),
+                                        "faces": sign,
+                                        # extent along the wall (other plan axis) where both faces run side by side
+                                        "lo": round(float(wlo + run[0] * OVERLAP_BIN), 2),
+                                        "hi": round(float(wlo + (run[-1] + 1) * OVERLAP_BIN), 2)})
     return {"thickness_median_cm": float(np.median(th)) if th else float("nan"), "n_walls": len(lines),
             "double_walls": doubles}

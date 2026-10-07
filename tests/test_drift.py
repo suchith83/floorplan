@@ -180,3 +180,14 @@ def test_wall_quality_counts_same_facing_double_but_not_partition():
     P5, N5 = _face(0.06, +1, y0=4.0)
     q = drift.wall_quality(np.r_[P1, P5], np.r_[N1, N5], 0.01)
     assert q["double_walls"] == []
+
+
+def test_double_wall_needs_one_continuous_side_by_side_stretch():
+    # two separate walls on the line x = 0, each shadowed 6 cm off by a 0.3 m sliver: 0.6 m shared in total,
+    # but never 0.5 m side by side in one place -> not a double wall
+    A1, M1 = _face(0.0, +1, y0=0.0, length=3.0)
+    A2, M2 = _face(0.0, +1, y0=6.0, length=3.0)
+    B1, K1 = _face(0.06, +1, y0=2.7, length=0.3)
+    B2, K2 = _face(0.06, +1, y0=6.0, length=0.3)
+    q = drift.wall_quality(np.r_[A1, A2, B1, B2], np.r_[M1, M2, K1, K2], 0.01)
+    assert q["double_walls"] == []
