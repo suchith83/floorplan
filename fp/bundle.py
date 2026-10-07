@@ -27,7 +27,7 @@ class CaptureBundle:
 
     @property
     def has_depth(self) -> bool:
-        return all(f.depth is not None and f.T_wc is not None for f in self.frames)
+        return bool(self.frames) and all(f.depth is not None and f.T_wc is not None for f in self.frames)
 
 
 @dataclass

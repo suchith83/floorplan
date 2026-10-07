@@ -59,7 +59,8 @@ def test_run_writes_a_valid_plan_even_when_the_reader_is_missing(tmp_path):
     out = tmp_path / "out"
     plan = run(_fake_stray(tmp_path / "cap"), out)
     assert plan["tier"] == "lidar" and plan["rooms"] == []
-    assert {w["stage"] for w in plan["warnings"]} >= {"ingest", "drift", "rooms"}
+    assert {w["stage"] for w in plan["warnings"]} >= {"ingest", "rooms"}
+    assert plan["drift"]["method"].startswith("not run")     # no poses were used, so none "as-is"
     assert plan["footprint_area"]["observed"] is False and plan["footprint_area"]["value"] is None
     for f in ("plan.json", "plan.svg", "report.html"):
         assert (out / f).stat().st_size > 0
@@ -78,3 +79,47 @@ def test_a_video_without_a_local_backend_still_gives_a_valid_plan(tmp_path, monk
     plan = run(vid, tmp_path / "o", damage=False)
     assert plan["tier"] == "video" and plan["intervals"]["scale"] == contract.TIER_SCALE["video"]
     assert any(w["stage"] == "recon" for w in plan["warnings"])
+
+
+def test_a_heic_only_folder_still_gives_a_valid_plan(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "photos" / "kitchen").mkdir(parents=True)
+    (tmp_path / "photos" / "kitchen" / "IMG_0001.HEIC").write_bytes(b"not really heic")
+    plan = run(tmp_path / "photos", tmp_path / "o")
+    assert plan["tier"] == "photos" and plan["rooms"] == []
+    assert any(w["stage"] == "ingest" and "HEIC" in w["message"] for w in plan["warnings"])
+    assert (tmp_path / "o" / "report.html").exists()
+
+
+def test_an_empty_bundle_has_no_depth():
+    from fp.bundle import CaptureBundle
+    assert not CaptureBundle(source="photos", frames=[]).has_depth
+
+
+def test_render_lists_every_field_error_instead_of_a_traceback(tmp_path):
+    from pathlib import Path
+
+    from fp.cli import render
+    plan = json.loads(Path("tests/fixtures/plan_two_rooms.json").read_text())
+    plan["rooms"][0]["walls"][0]["length"]["lo"] = 4.5           # lo above the value
+    plan["rooms"][1]["ceiling_height"]["observed"] = True        # null value claimed as observed
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps(plan))
+    with pytest.raises(SystemExit) as e:
+        render(bad, tmp_path / "o")
+    msg = str(e.value)
+    assert "does not match schema" in msg and "rooms.0.walls.0.length" in msg and "rooms.1.ceiling_height" in msg
+    with pytest.raises(SystemExit, match="No such plan file"):
+        render(tmp_path / "missing.json", None)
+
+
+def test_a_damage_box_below_the_floor_is_clipped_not_inverted():
+    b = contract._bbox(1.0, -0.4, 0.3)                           # centre 40 cm below the floor
+    assert b["v0"] <= b["v1"] and b["u0"] <= b["u1"] and b["v0"] == 0.0
+
+
+def test_the_report_badge_shows_the_interval_scale_plainly(tmp_path):
+    from fp.report import write_outputs
+    plan = json.loads(open("tests/fixtures/plan_two_rooms.json").read())
+    write_outputs(plan, tmp_path)
+    assert "intervals ×1<" in (tmp_path / "report.html").read_text()

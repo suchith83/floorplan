@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fp.bundle import CaptureBundle
-from fp.contract import StageNotBuilt
+from fp.contract import StageError, StageNotBuilt
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".3gp", ".mkv", ".webm"}
 PHOTO_EXT = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
@@ -47,5 +47,11 @@ def load_capture(path: Path, *, tier: str | None = None, max_frames: int | None 
     if tier != detected:
         raise SystemExit(f"--tier {tier} needs a LiDAR capture; {path} is a {detected} capture.")
     if detected == "video":
-        return video.load(path, max_frames=max_frames or video.MAX_KEYFRAMES)
-    return photos.load(path, max_frames=max_frames or photos.MAX_PHOTOS)
+        bundle = video.load(path, max_frames=max_frames or video.MAX_KEYFRAMES)
+    else:
+        if not any(p.suffix.lower() in {".jpg", ".jpeg", ".png"} for p in path.rglob("*")):
+            raise StageNotBuilt("ingest", "HEIC photos are not decoded yet (work order 05); export as JPEG.")
+        bundle = photos.load(path, max_frames=max_frames or photos.MAX_PHOTOS)
+    if not bundle.frames:
+        raise StageError("ingest", f"No usable frames in {path} (all blurry, duplicate or unreadable).")
+    return bundle

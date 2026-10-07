@@ -13,8 +13,13 @@ Interval model (simple on purpose, every term explainable):
    A wall that was never seen (inferred from the floor edge) gets  pos x INFERRED_FACTOR.
  - A wall's length is the distance between its two neighbouring planes, so its half-width is the
    sum of their two `pos` values, plus SCALE_REL x length for tiers whose metric scale is learned.
- - Area: moving wall i outward by d adds length_i x d, so half-width = sum(length_i x pos_i).
- - Perimeter: moving a wall by d lengthens its two neighbours by d each, so half-width = 2 x sum(pos_i).
+ - Area: moving wall i outward by d adds length_i x d, so half-width = sum(length_i x pos_i),
+   plus 2 x SCALE_REL x area (a scale error s changes every length by s, so the area by about 2s).
+ - Perimeter: moving a wall by d lengthens its two neighbours by d each, so half-width = 2 x sum(pos_i),
+   plus SCALE_REL x perimeter.
+ - Ceiling: CEILING_HALF x TIER_SCALE + SCALE_REL x height.
+ - Smear is measured in the cloud itself, so it is added as-is, not multiplied by the tier scale.
+ - Each half-width adds its terms (worst case), so the intervals are conservative until 07 calibrates them.
 """
 from __future__ import annotations
 
@@ -40,12 +45,17 @@ TIER_NAME = {"lidar": "LiDAR depth (metric)", "video": "MapAnything metric depth
              "photos": "MapAnything metric depth (learned)"}
 
 
-class StageNotBuilt(Exception):
-    """Raised by a pipeline stage that doesn't exist yet. The CLI turns it into a warning."""
+class StageError(Exception):
+    """A stage could not produce its output from this capture (e.g. no usable frames). The CLI records it
+    as a warning and still writes a valid plan, with the missing parts `observed: false`."""
 
     def __init__(self, stage: str, message: str):
         super().__init__(message)
         self.stage = stage
+
+
+class StageNotBuilt(StageError):
+    """Raised by a pipeline stage that doesn't exist yet."""
 
 
 def measure(value, half, unit: str, method: str, observed: bool = True) -> dict:
@@ -158,8 +168,8 @@ def fill_from_geometry(plan: dict, rooms: list[dict], connections: list[dict]) -
 
 def damage_to_schema(plan: dict, items: list[dict]) -> None:
     """Damage items from fp.damage.project.assess (+ concealed rules) -> plan damage / concealed.
-    Extent is the square of the detection's largest 5-95% spread: a bounding-box upper bound, not
-    a mask area, so it is marked not observed (work order 06 measures the mask on the surface)."""
+    The detection's largest 5-95% spread s bounds its area by s^2, so extent is stated as [0, s^2] with
+    s^2/2 as the value, and marked not observed (work order 06 measures the mask on the surface)."""
     for d in items:
         surface = f"{d['room']}.{d['wall']}" if d["kind"] == "wall" else f"{d['room']}.{d['kind']}"
         s, (x, y, z) = d["size_m"], d["position_m"]
@@ -169,12 +179,18 @@ def damage_to_schema(plan: dict, items: list[dict]) -> None:
             "position": [float(x), float(y), float(z)],
             "extent_m2": measure(s * s / 2, s * s / 2, "m2",
                                  "bounding square of the detection's 3D spread (upper bound)", observed=False),
-            "bbox_on_surface": {"u0": u - s / 2, "v0": max(0.0, v - s / 2), "u1": u + s / 2, "v1": v + s / 2},
+            "bbox_on_surface": _bbox(u, v, s),
             "evidence_image": d.get("evidence"), "score": float(d["score"])})
         for c in d.get("concealed", []):
             plan["concealed"].append({
                 "id": f"C{len(plan['concealed']) + 1}", "damage_id": d["id"], "rule_id": c["rule"],
                 "rule_text": c["hypothesis"], "evidence": c["evidence"], "label": "hypothesis"})
+
+
+def _bbox(u: float, v: float, s: float) -> dict:
+    """An s x s box centred on (u, v), clipped to the surface's positive quadrant (along-wall >= 0, above floor)."""
+    u0, v0 = max(0.0, u - s / 2), max(0.0, v - s / 2)
+    return {"u0": u0, "v0": v0, "u1": max(u0, u + s / 2), "v1": max(v0, v + s / 2)}
 
 
 def capture_id(path: Path) -> str:

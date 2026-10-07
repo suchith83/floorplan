@@ -27,6 +27,10 @@ def _num(v, unit: str) -> str:
     return f"{v:.2f}" if isinstance(v, (int, float)) else _e(v)
 
 
+def _scale(x) -> str:
+    return f"{x:g}" if isinstance(x, (int, float)) else _e(x)
+
+
 def _out(lo: float, hi: float) -> tuple[float, float]:
     """Round an interval OUTWARD to 2 decimals, so the printed range is never narrower than the stated one
     (1e-6 absorbs float noise such as 4.18 stored as 4.1799999)."""
@@ -102,7 +106,7 @@ def render_report(plan: dict, out: Path) -> str:
     cal = "calibrated" if iv.get("calibrated") else "provisional"
     badges = (f'<span class="badge tier">{tier}</span>'
               f'<span class="badge">{_e(lvl)}</span>'
-              f'<span class="badge">intervals ×{_e(iv.get("scale"))}</span>'
+              f'<span class="badge">intervals ×{_scale(iv.get("scale"))}</span>'
               f'<span class="badge {"ok" if iv.get("calibrated") else "warn"}">{cal}</span>')
     iv_method = f'<p class="muted small">Interval method: {_e(iv.get("method"))}</p>' if iv.get("method") else ""
 

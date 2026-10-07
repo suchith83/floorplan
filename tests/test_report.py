@@ -47,10 +47,10 @@ def test_svg_fixture_content(plan):
     joined = "\n".join(texts)
     for r in plan["rooms"]:
         assert r["name"] in texts
-    assert "15.12 m²" in texts and "10.01 m²" in texts
-    assert "h 2.48 m" in texts and "h not observed" in texts
-    assert "4.20 m ±0.02" in texts  # R1.W1
-    assert "3.60 m ±0.15" in texts  # inferred R1.W4: wide interval
+    assert "15.12 m² ±0.27" in texts and "10.01 m² ±0.21" in texts
+    assert "h 2.48 m ±0.02" in texts and "h not observed" in texts
+    assert "4.20 m ±0.05" in texts  # R1.W1: bounded by the inferred R1.W4, so wider
+    assert "3.60 m ±0.02" in texts  # R1.W4 unseen, but its length is between two seen planes
     assert "door 0.85 m ±0.02" in texts and "window 1.20 m ±0.03" in texts
     assert "1 m" in texts and "+y (plan)" in joined
     assert "D1" in texts  # damage pin
@@ -123,7 +123,7 @@ def test_write_outputs(plan, tmp_path):
     assert "evidence image missing" in html
     assert '<span class="badge tier">LiDAR</span>' in html
     assert "90% intervals" in html and "provisional" in html
-    assert "inferred / assumed" in html  # S1 quantity and R1.W4 length are not observed
+    assert "inferred / assumed" in html  # S1 quantity and R1.W1/W3 lengths are not observed
     assert "<svg" in html and "http://" not in html.replace('xmlns="http://www.w3.org/2000/svg"', "")
     assert render_report(plan, tmp_path / "o") == html  # deterministic
 

@@ -18,7 +18,7 @@ import numpy as np
 
 from fp import contract
 from fp.bundle import CaptureBundle
-from fp.contract import StageNotBuilt
+from fp.contract import StageError, StageNotBuilt
 
 PREDICTED_MAX_DEPTH = 5.0  # m; predicted depth is less reliable far away
 ASSUMED_CAMERA_H = 1.2    # m above the floor, used only when no floor is seen
@@ -54,7 +54,6 @@ def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local",
         cache: bool = True, filter_frames: bool = True, max_frames: int | None = None, damage: bool = True,
         wet_rooms: set[str] = frozenset()) -> dict:
     from fp.ingest import detect_tier
-    from fp.schema import validate
     t0 = time.perf_counter()
     capture = Path(capture)
     tier = detect_tier(capture) if tier == "auto" else tier
@@ -64,10 +63,6 @@ def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local",
     timings = plan["timings"]
     debug = out / "debug"
     debug.mkdir(parents=True, exist_ok=True)
-    plan["drift"]["method"] = ("disabled (--no-drift-correction): poses used as-is" if not drift_correction
-                               else "not built yet (work order 03): poses used as-is")
-    if drift_correction:
-        warn("drift", "Drift correction not built yet (work order 03); poses used as-is.")
     try:
         legacy = _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_frames, warn)
         if damage and backend == "modal":
@@ -75,15 +70,41 @@ def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local",
                 _assess_damage(legacy, plan, out, wet_rooms, warn)
         elif damage:
             warn("damage", "Local damage backend not built yet (work order 06); damage not assessed.")
-    except StageNotBuilt as e:
+    except StageError as e:
         warn(e.stage, str(e))
+    if not plan["rooms"]:
+        plan["drift"]["method"] = "not run: no poses reached the geometry stage"
+    elif not drift_correction:
+        plan["drift"]["method"] = "disabled (--no-drift-correction): poses used as-is"
+    else:
+        plan["drift"]["method"] = "not built yet (work order 03): poses used as-is"
+        warn("drift", "Drift correction not built yet (work order 03); poses used as-is.")
     if not plan["rooms"]:
         warn("rooms", "No rooms reconstructed.")
     warn("intervals", "Intervals are provisional (fp/contract.py), not yet calibrated on ground truth (work order 07).")
     timings["total"] = round(time.perf_counter() - t0, 2)
-    plan = validate(plan).model_dump(mode="json", by_alias=True)
+    try:
+        plan = _validated(plan)
+    except SystemExit:  # a bug in our own output: keep it for debugging, then stop
+        (out / "plan.invalid.json").write_text(json.dumps(plan, indent=1))
+        raise
     _write(plan, out)
     return plan
+
+
+def _validated(plan: dict | Path) -> dict:
+    """Schema-validate a plan (dict or JSON path); on failure exit with every error on its own line, not a
+    traceback. Pydantic checks fields before the cross-reference pass, so ID errors show once fields pass."""
+    from pydantic import ValidationError
+
+    from fp.schema import validate
+    if isinstance(plan, Path) and not plan.is_file():
+        raise SystemExit(f"No such plan file: {plan}")
+    try:
+        return validate(plan).model_dump(mode="json", by_alias=True)
+    except ValidationError as e:
+        lines = [f"  {'.'.join(map(str, err['loc'])) or '<plan>'}: {err['msg']}" for err in e.errors()]
+        raise SystemExit("plan.json does not match schema 1.0:\n" + "\n".join(lines))
 
 
 def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_frames, warn) -> dict:
@@ -160,8 +181,7 @@ def _write(plan: dict, out: Path) -> None:
 def render(plan_path: Path, out: Path | None) -> Path:
     """plan.json -> plan.svg + report.html (validated first). Default output: next to the plan."""
     from fp.report import write_outputs
-    from fp.schema import validate
-    plan = validate(plan_path).model_dump(mode="json", by_alias=True)
+    plan = _validated(Path(plan_path))
     out = out or plan_path.parent
     out.mkdir(parents=True, exist_ok=True)
     write_outputs(plan, out)

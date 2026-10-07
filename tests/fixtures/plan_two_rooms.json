@@ -12,18 +12,18 @@
       "id": "R1",
       "name": "Living room",
       "polygon": [[0.0, 0.0], [4.2, 0.0], [4.2, 3.6], [0.0, 3.6]],
-      "floor_area": {"value": 15.12, "lo": 14.85, "hi": 15.39, "unit": "m2", "method": "polygon area on wall planes", "observed": true},
+      "floor_area": {"value": 15.12, "lo": 14.85, "hi": 15.39, "unit": "m2", "method": "polygon area on wall planes (one wall inferred)", "observed": false},
       "ceiling_height": {"value": 2.48, "lo": 2.465, "hi": 2.495, "unit": "m", "method": "ceiling plane minus floor plane", "observed": true},
-      "perimeter": {"value": 15.6, "lo": 15.45, "hi": 15.75, "unit": "m", "method": "sum of wall lengths", "observed": true},
+      "perimeter": {"value": 15.6, "lo": 15.45, "hi": 15.75, "unit": "m", "method": "sum of wall lengths (one wall inferred)", "observed": false},
       "walls": [
         {"id": "R1.W1", "p0": [0.0, 0.0], "p1": [4.2, 0.0], "observed": true, "coverage": 0.82,
-         "length": {"value": 4.2, "lo": 4.18, "hi": 4.22, "unit": "m", "method": "distance between neighbouring wall planes", "observed": true}},
+         "length": {"value": 4.2, "lo": 4.15, "hi": 4.25, "unit": "m", "method": "distance between neighbouring wall planes (a neighbour was inferred)", "observed": false}},
         {"id": "R1.W2", "p0": [4.2, 0.0], "p1": [4.2, 3.6], "observed": true, "coverage": 0.64,
          "length": {"value": 3.6, "lo": 3.58, "hi": 3.62, "unit": "m", "method": "distance between neighbouring wall planes", "observed": true}},
         {"id": "R1.W3", "p0": [4.2, 3.6], "p1": [0.0, 3.6], "observed": true, "coverage": 0.71,
-         "length": {"value": 4.2, "lo": 4.17, "hi": 4.23, "unit": "m", "method": "distance between neighbouring wall planes", "observed": true}},
+         "length": {"value": 4.2, "lo": 4.15, "hi": 4.25, "unit": "m", "method": "distance between neighbouring wall planes (a neighbour was inferred)", "observed": false}},
         {"id": "R1.W4", "p0": [0.0, 3.6], "p1": [0.0, 0.0], "observed": false, "coverage": 0.08,
-         "length": {"value": 3.6, "lo": 3.45, "hi": 3.75, "unit": "m", "method": "edge of the floor footprint (wall not seen)", "observed": false}}
+         "length": {"value": 3.6, "lo": 3.58, "hi": 3.62, "unit": "m", "method": "distance between neighbouring wall planes", "observed": true}}
       ],
       "openings": [
         {"id": "R1.O1", "kind": "door", "wall_id": "R1.W2", "rooms": ["R1", "R2"], "center": [4.26, 1.425],
@@ -61,7 +61,7 @@
     }
   ],
   "connections": [{"rooms": ["R1", "R2"], "opening_id": "R1.O1"}],
-  "footprint_area": {"value": 25.13, "lo": 24.65, "hi": 25.61, "unit": "m2", "method": "sum of room areas", "observed": true},
+  "footprint_area": {"value": 25.13, "lo": 24.65, "hi": 25.61, "unit": "m2", "method": "sum of room areas", "observed": false},
   "drift": {"method": "none (fixture)", "enabled": false, "metrics": {}},
   "damage": [
     {"id": "D1", "class": "water_stain", "surface_id": "R2.W2", "position": [7.5, 1.1, 0.25],
@@ -78,7 +78,7 @@
     {"id": "S1", "surface_id": "R2.W2", "action": "stain-block and repaint wall", "unit": "m2",
      "quantity": {"value": 6.0, "lo": 5.4, "hi": 6.6, "unit": "m2", "method": "wall length x assumed 2.5 m ceiling (ceiling not observed)", "observed": false}},
     {"id": "S2", "surface_id": "R1.floor", "action": "replace flooring", "unit": "m2",
-     "quantity": {"value": 15.12, "lo": 14.85, "hi": 15.39, "unit": "m2", "method": "room floor area", "observed": true}}
+     "quantity": {"value": 15.12, "lo": 14.85, "hi": 15.39, "unit": "m2", "method": "room floor area (one wall inferred)", "observed": false}}
   ],
   "timings": {"total": 0.0},
   "warnings": [

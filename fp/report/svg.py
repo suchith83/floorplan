@@ -79,14 +79,20 @@ def fmt_len(m: dict | None) -> str:
     v = _val(m)
     if v is None:
         return "? m"
-    hw = half_width(m)
     # the half-width rounds UP to the cm, so the label never claims more precision than the interval
-    return f"{v:.2f} m" + (f" ±{math.ceil(hw * 100 - 1e-6) / 100:.2f}" if hw is not None else "")
+    return f"{v:.2f} m{_pm(m)}"
+
+
+def _pm(m: dict | None) -> str:
+    """' ±0.03' (half-width rounded UP to 2 decimals), or '' without an interval."""
+    hw = half_width(m)
+    return "" if hw is None else f" ±{math.ceil(hw * 100 - 1e-6) / 100:.2f}"
 
 
 def fmt_area(m: dict | None) -> str:
+    """'15.12 m² ±0.27', or '? m²' when not observed."""
     v = _val(m)
-    return "? m²" if v is None else f"{v:.2f} m²"
+    return "? m²" if v is None else f"{v:.2f} m²{_pm(m)}"
 
 
 def _text_w(s: str, size: float) -> float:
@@ -337,8 +343,7 @@ def render(plan: dict) -> str:
     fa = plan.get("footprint_area")
     sub = [tier]
     if _val(fa) is not None:
-        hw = half_width(fa)
-        sub.append(f"footprint {fmt_area(fa)}" + (f" ±{hw:.2f}" if hw is not None else ""))
+        sub.append(f"footprint {fmt_area(fa)}")
     sub.append(f"± = {lvl} interval" + ("" if iv.get("calibrated") else " (provisional)"))
     sub.append("+y is the plan axis, not north")
     out.append(_text(24, 22, f"Floor plan · {cap}", size=17, anchor="start", weight="bold", halo=False))
@@ -440,7 +445,7 @@ def render(plan: dict) -> str:
         x, y = view((q.x, q.y))
         name = str(r.get("name") or r.get("id") or "Room")
         ch = r.get("ceiling_height")
-        hline = f"h {_val(ch):.2f} m" if _val(ch) is not None else "h not observed"
+        hline = f"h {_val(ch):.2f} m{_pm(ch)}" if _val(ch) is not None else "h not observed"
         lines = [(name, 14, "bold", INK), (fmt_area(r.get("floor_area")), 13, None, INK), (hline, 12, None, MUTED)]
         wmax = max(_text_w(s, sz) for s, sz, _, _ in lines)
         placer.block(box(x - wmax / 2 - 4, y - 28, x + wmax / 2 + 4, y + 28))
