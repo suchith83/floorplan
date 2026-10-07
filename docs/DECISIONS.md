@@ -335,3 +335,52 @@ numbered D05.x so the merge doesn't clash. -->
   0.15 m sill that no rule covers, two curtained windows, the corridor-end closed door) = **50 %**, still
   below 85 %. These rules were found on the same capture they are scored on, so 50 % is in-sample (optimistic).
   The adversarial case (a wall line moved 30 cm into c00a's room) no longer produces a closed door.
+
+## D06.1. Local damage detector: Grounding DINO tiny + SAM 2.1 small, not SAM 3
+- **Context.** Damage must run on the laptop (no calls to our cloud). Beta used SAM 3 on Modal.
+- **Options.** (a) SAM 3 locally (text -> masks, one model); (b) Grounding DINO (text -> boxes) + SAM 2.1
+  (box -> mask); (c) OWLv2 + SAM 2.
+- **Choice.** (b), `fp/damage/detect_local.py`: one text pass for all classes ("crack. water stain. mold. peeling
+  paint. hole in wall."), the published default thresholds (box 0.35, text 0.25, not tuned), a matched phrase
+  must name exactly one class, masks over 25 % of the image are the wall itself and dropped. Same per-image
+  deterministic cache as 05. SAM 3 stays as `--backend modal`.
+- **Evidence.** SAM 3's weights are gated: 401 on this Mac, and an evaluator's cold run would need HF approval
+  first. (b) is ungated Apache-2.0. MPS: 0.65 s detection + 0.3 s masks per full-res frame, ~30 s model load;
+  c00a damage stage 16 s warm, c7d2 43 s.
+
+## D06.2. Metric extent = mask coverage x pixel footprint on the surface plane
+- **Context.** Beta's extent was a bounding square, an upper bound marked not observed.
+- **Choice.** The mask is area-resized onto the depth image (fractional coverage, so a 2 px crack counts in a
+  7.5 px LiDAR depth pixel); each covered pixel with depth adds coverage × z²/(fx·fy·|cos a|), a = angle between
+  its ray and the surface normal (capped at 5×). Only points within 8 cm of the surface plane count (mask spill
+  onto furniture doesn't), and ≥ 50 % of the mask must lie on it, else the detection is on furniture and dropped.
+  Interval: the wider of 20 % (+ 2 × the tier's scale term: area goes with scale²) and half the views' spread.
+- **Evidence.** Synthetic rendered frame: 0.20 × 0.20 m stain = 0.040 m² measured within 15 %, face-on and
+  34° off; a mask on a cupboard front 0.6 m from the wall is dropped (tests/test_damage.py).
+
+## D06.3. A detection must be confirmed from a second viewpoint
+- **Context.** On c00a170fe1, 8 detections gave 4 items; by eye all 4 were false: shadows, a reflection, tile
+  edges. Raising thresholds would be tuning on the sample data.
+- **Choice.** Look again: run the detector on up to 2 other frames that see the same spot unoccluded, from a
+  camera ≥ 25 cm away; keep the detection only if the same class lands on the same surface within 30 cm.
+  Unconfirmed detections are not damage; they are listed in a warning with their crop (damage/unconfirmed_k.jpg).
+- **Evidence.** A stain stays put when you move; a reflection moves and a lighting artefact disappears.
+  c00a 4 -> 1 item, c7d2 5 -> 1, 1a83 6 -> 3. Static shadows survive it (they also stay put): the remaining
+  items on the sample data are all false (listed in STATUS 06).
+
+## D06.4. Concealed damage: transparent rules, labelled hypotheses
+- **Context.** No dataset of hidden damage behind visible symptoms exists to learn from.
+- **Choice.** Five rules (`fp/damage/rules.py`), each flag carrying its rule id, rule text and evidence, label
+  "hypothesis": C1 wet damage on a ceiling; C2 wet damage / peeling paint below 0.5 m on a wall; C3 wet damage on
+  a wall shared with a wet room; C4 crack within 0.6 m of a door; C5 (new) wet damage on a ceiling or the top
+  0.3 m of a wall in or next to a wet room (pipes in the ceiling void). Wet rooms come from `--wet-rooms`.
+- **Evidence.** Each rule is one sentence a surveyor would say; tests check each fires and none fire without
+  their trigger.
+
+## D06.5. Scope by interval arithmetic
+- **Choice.** `fp/scope.py`: repaint wall = length × ceiling height − openings (assumed 2.4 m [2.1, 3.2] when the
+  ceiling wasn't observed, then not observed); patch and fill = count of cracks/holes; mould treatment /
+  stain-block = sum of extents; repaint ceiling and replace floor finish = floor area; skirting = perimeter −
+  door and passage widths. Each [lo, hi] is pushed through the formula worst-case (lo uses length lo × height lo
+  − openings hi).
+- **Evidence.** Test: wall 3.0 × 2.5 − 0.9 × 2.05 door = 5.655 m² with lo < value < hi; every surface_id validates.
