@@ -167,3 +167,12 @@ def test_openings_become_schema_openings_and_replace_the_neck_connection():
     assert plan["rooms"][0]["openings"][0]["width"]["value"] == 0.9
     assert plan["rooms"][0]["ceiling_height"]["value"] == 2.5
     assert plan["rooms"][1]["ceiling_height"]["observed"] is False
+
+
+def test_one_doorway_cut_by_two_rooms_wall_lines_is_listed_once():
+    mk = lambda room, behind, c, u, n: {"room": room, "behind": behind, "center": c, "u": np.array(u),
+                                        "n": np.array(n), "width_m": 1.46, "jambs": [(0, 0, 10, "reveal")] * 2}
+    a = mk("R4", "R8", [1.53, -0.82], [0, 1], [1, 0])
+    b = mk("R8", "R4", [1.08, -1.28], [1, 0], [0, -1])          # perpendicular wall, same two rooms, 0.6 m away
+    far = mk("R8", "R4", [3.5, -1.28], [1, 0], [0, -1])         # a second opening between them, 2.4 m away
+    assert len(O._dedupe([a, b])) == 1 and len(O._dedupe([a, b, far])) == 2

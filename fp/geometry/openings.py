@@ -65,6 +65,8 @@ RECESS_DEPTH = 0.40  # m: a surface facing the room this close behind the plane 
 RECESS_FRAC = 0.5    # ...covering >= half the opening's cells: a recess, not an opening -- unless it has a door's
                      # shape: then it is a closed door, its leaf set back 3-5 cm in the frame (seen on c7d28f72c6)
 PARTNER_DIST = 0.40  # m: an opening on a parallel wall this close is the same opening seen from the other room
+SAME_PAIR_DIST = 1.0  # m: two openings between the same two rooms closer than this are one (a doorway at a corner
+                      # is cut by both rooms' wall lines; real double doors between two rooms are rarer than that)
 PROBE = (0.05, 0.7)  # m: walk this far out from an opening to find the room behind it
 
 
@@ -341,6 +343,10 @@ def _dedupe(cands):
     for c in sorted(cands, key=_score, reverse=True):
         dup = False
         for k in keep:
+            pair = c["behind"] is not None and {c["room"], c["behind"]} == {k["room"], k["behind"]}
+            if pair and np.hypot(*np.subtract(c["center"], k["center"])) < SAME_PAIR_DIST:
+                dup = True                      # same two rooms, same place: one opening on two walls' lines
+                break
             if abs(float(np.dot(c["u"], k["u"]))) < 0.99:
                 continue
             d = np.subtract(c["center"], k["center"])
