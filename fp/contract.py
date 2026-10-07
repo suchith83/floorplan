@@ -220,33 +220,6 @@ def fill_from_geometry(plan: dict, rooms: list[dict], connections: list[dict], o
                                          observed=all(m["observed"] for m in areas))
 
 
-def damage_to_schema(plan: dict, items: list[dict]) -> None:
-    """Damage items from fp.damage.project.assess (+ concealed rules) -> plan damage / concealed.
-    The detection's largest 5-95% spread s bounds its area by s^2, so extent is stated as [0, s^2] with
-    s^2/2 as the value, and marked not observed (work order 06 measures the mask on the surface)."""
-    for d in items:
-        surface = f"{d['room']}.{d['wall']}" if d["kind"] == "wall" else f"{d['room']}.{d['kind']}"
-        s, (x, y, z) = d["size_m"], d["position_m"]
-        u, v = (d.get("along_wall_m", 0.0), z) if d["kind"] == "wall" else (x, y)
-        plan["damage"].append({
-            "id": d["id"], "class": d["type"].replace(" ", "_"), "surface_id": surface,
-            "position": [float(x), float(y), float(z)],
-            "extent_m2": measure(s * s / 2, s * s / 2, "m2",
-                                 "bounding square of the detection's 3D spread (upper bound)", observed=False),
-            "bbox_on_surface": _bbox(u, v, s),
-            "evidence_image": d.get("evidence"), "score": float(d["score"])})
-        for c in d.get("concealed", []):
-            plan["concealed"].append({
-                "id": f"C{len(plan['concealed']) + 1}", "damage_id": d["id"], "rule_id": c["rule"],
-                "rule_text": c["hypothesis"], "evidence": c["evidence"], "label": "hypothesis"})
-
-
-def _bbox(u: float, v: float, s: float) -> dict:
-    """An s x s box centred on (u, v), clipped to the surface's positive quadrant (along-wall >= 0, above floor)."""
-    u0, v0 = max(0.0, u - s / 2), max(0.0, v - s / 2)
-    return {"u0": u0, "v0": v0, "u1": max(u0, u + s / 2), "v1": max(v0, v + s / 2)}
-
-
 def capture_id(path: Path) -> str:
     path = Path(path)
     return path.stem if path.is_file() else path.name

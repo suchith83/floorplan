@@ -1,9 +1,7 @@
-"""Room split, damage placement and concealed-damage rules on small synthetic inputs."""
+"""Room split on small synthetic inputs (damage tests: tests/test_damage.py)."""
 import numpy as np
 import pytest
 
-from fp.damage.project import snap
-from fp.damage.rules import concealed
 from fp.geometry.rooms import doors, split_rooms
 
 RES = 0.02
@@ -25,32 +23,6 @@ def test_split_rooms_keeps_a_long_galley_as_one_room():
     fp = np.zeros((300, 80), bool)
     fp[10:290, 10:70] = True               # 5.6 x 1.2 m, like the test kitchen
     assert split_rooms(fp, RES).max() == 1
-
-
-ROOM = {"id": "R1", "ceiling_h_m": 2.5, "polygon": [[0, 0], [4, 0], [4, 3], [0, 3]],
-        "walls": [{"id": "W1", "axis": "y", "coord": 0.0, "p0": [0, 0], "p1": [4, 0]},
-                  {"id": "W2", "axis": "x", "coord": 4.0, "p0": [4, 0], "p1": [4, 3]},
-                  {"id": "W3", "axis": "y", "coord": 3.0, "p0": [4, 3], "p1": [0, 3]},
-                  {"id": "W4", "axis": "x", "coord": 0.0, "p0": [0, 3], "p1": [0, 0]}]}
-
-
-def test_snap_places_a_defect_on_a_wall_the_floor_or_the_ceiling():
-    plan = {"rooms": [ROOM]}
-    on_wall = snap(np.array([2.0, 0.05, 1.2]), plan)
-    assert (on_wall["kind"], on_wall["wall"], on_wall["along_wall_m"]) == ("wall", "W1", 2.0)
-    assert snap(np.array([2.0, 1.5, 0.02]), plan)["kind"] == "floor"
-    assert snap(np.array([2.0, 1.5, 2.48]), plan)["kind"] == "ceiling"
-    assert snap(np.array([2.0, 1.5, 1.0]), plan) is None      # mid-air: furniture, not a surface
-
-
-def test_rules_flag_a_low_wall_stain_and_a_crack_by_a_door():
-    plan = {"rooms": [ROOM], "connections": [{"rooms": ["R1", "R2"], "center": [4.0, 1.5]}]}
-    items = [{"type": "water stain", "kind": "wall", "room": "R1", "wall": "W1", "height_m": 0.3, "position_m": [2, 0, 0.3]},
-             {"type": "crack", "kind": "wall", "room": "R1", "wall": "W2", "height_m": 1.9, "position_m": [4.0, 1.8, 1.9]},
-             {"type": "mold", "kind": "ceiling", "room": "R1", "height_m": 2.5, "position_m": [1, 1, 2.5]}]
-    concealed(items, plan)
-    assert [[c["rule"] for c in d["concealed"]] for d in items] == [["C2"], ["C4"], ["C1"]]
-    assert all(c["label"] == "hypothesis" for d in items for c in d["concealed"])
 
 
 def test_split_rooms_keeps_a_corridor_apart_from_the_room_it_leads_from():

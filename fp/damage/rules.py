@@ -1,52 +1,97 @@
 """Likely concealed damage: transparent rules over a visible defect and where it sits in the plan.
 
-No dataset supports learning concealed damage, so these are hypotheses, labelled as such, each
-showing the rule that fired and its evidence."""
+No dataset supports learning concealed damage, so these are hypotheses, labelled as such, each carrying the
+rule that fired (id + text) and its evidence. Rules read schema damage items (fp.damage.project) and the plan.
+
+  C1  water stain or mould on a ceiling        -> leak from above (roof, pipes, a bathroom upstairs)
+  C2  water stain / mould / peeling paint on a wall below 0.5 m -> rising damp or a leaking pipe in the wall
+  C3  water stain or mould on a wall shared with a wet room      -> plumbing leak from that room
+  C4  crack within 0.6 m of a door                               -> structural movement around the frame
+  C5  water stain or mould on a ceiling or the top 0.3 m of a wall, in or next to a wet room
+                                                                 -> leak from wet-room pipes in the ceiling void"""
 from __future__ import annotations
 
 import numpy as np
 
-WET = ("water stain", "mold")
-WET_OR_PAINT = WET + ("peeling paint",)
+WET = ("water_stain", "mold")
+WET_OR_PAINT = WET + ("peeling_paint",)
+LOW_WALL = 0.5          # m: rising damp rarely reaches above ~0.5-1 m; a stain lower than this is suspicious
+DOOR_NEAR = 0.6         # m from a door's centre line: frame corners crack under movement
+CEILING_BAND = 0.3      # m below the ceiling: a wall stain this high came from above, not from the floor
+PARTITION = 0.35        # m: a parallel wall of another room within this is the other face of the same wall
+
+RULES = {
+    "C1": "Possible leak from above: roof, pipes or a bathroom on the floor above.",
+    "C2": "Possible rising damp or a leaking pipe inside the wall.",
+    "C3": "Possible plumbing leak from the wet room behind this wall.",
+    "C4": "Possible structural movement around the door frame.",
+    "C5": "Possible leak from wet-room pipes running in the ceiling void.",
+}
 
 
-def _shared_wall_rooms(plan: dict, room_id: str, wall_id: str, thickness: float = 0.35) -> list[str]:
-    """Rooms on the other side of a wall: a parallel wall of another room within one wall thickness."""
-    room = next(r for r in plan["rooms"] if r["id"] == room_id)
-    w = next(x for x in room["walls"] if x["id"] == wall_id)
-    ax = 0 if w["axis"] == "x" else 1
-    lo, hi = sorted([w["p0"][1 - ax], w["p1"][1 - ax]])
+def _walls(plan):
+    return {w["id"]: (r, w) for r in plan["rooms"] for w in r["walls"]}
+
+
+def shared_wall_rooms(plan: dict, wall_id: str) -> list[str]:
+    """Rooms on the other side of a wall: a parallel wall of another room within one partition thickness."""
+    r, w = _walls(plan)[wall_id]
+    p0, p1 = np.array(w["p0"]), np.array(w["p1"])
+    L = np.linalg.norm(p1 - p0)
+    u = (p1 - p0) / L
+    n = np.array([u[1], -u[0]])
     out = []
-    for r in plan["rooms"]:
-        if r["id"] == room_id:
+    for r2 in plan["rooms"]:
+        if r2["id"] == r["id"]:
             continue
-        for v in r["walls"]:
-            vlo, vhi = sorted([v["p0"][1 - ax], v["p1"][1 - ax]])
-            if v["axis"] == w["axis"] and abs(v["coord"] - w["coord"]) < thickness and min(hi, vhi) - max(lo, vlo) > 0.3:
-                out.append(r["id"])
+        for v in r2["walls"]:
+            q0, q1 = np.array(v["p0"]), np.array(v["p1"])
+            if abs(np.dot((q1 - q0) / max(np.linalg.norm(q1 - q0), 1e-9), u)) < 0.99:
+                continue
+            if abs(np.dot(q0 - p0, n)) > PARTITION:
+                continue
+            a, b = sorted([np.dot(q0 - p0, u), np.dot(q1 - p0, u)])
+            if min(L, b) - max(0.0, a) > 0.3:
+                out.append(r2["id"])
                 break
     return out
 
 
-def concealed(items: list[dict], plan: dict, wet_rooms: set[str] = frozenset()) -> None:
-    """Adds `concealed` hypotheses to each damage item, in place."""
+def _doors(plan):
+    return [o for r in plan["rooms"] for o in r["openings"] if o["kind"] == "door"]
+
+
+def concealed(items: list[dict], plan: dict, wet_rooms: set[str] = frozenset()) -> list[dict]:
+    """Schema ConcealedFlag dicts for the damage items (ids C1.. in order)."""
+    walls = _walls(plan)
+    ceil = {r["id"]: r["ceiling_height"]["value"] for r in plan["rooms"]}
+    flags = []
     for d in items:
-        hyp = []
-        if d["kind"] == "ceiling" and d["type"] in WET:
-            hyp.append(("C1", "Possible leak from above: roof, pipes or a bathroom on the floor above.",
-                        f"{d['type']} on the ceiling"))
-        if d["kind"] == "wall" and d["type"] in WET_OR_PAINT and d["height_m"] < 0.5:
-            hyp.append(("C2", "Possible rising damp or a leaking pipe inside the wall.",
-                        f"{d['type']} {d['height_m']:.2f} m above the floor (rule: below 0.5 m)"))
-        if d["kind"] == "wall" and d["type"] in WET:
-            behind = [r for r in _shared_wall_rooms(plan, d["room"], d["wall"]) if r in wet_rooms]
-            if behind:
-                hyp.append(("C3", "Possible plumbing leak from the wet room behind this wall.",
-                            f"{d['type']} on a wall shared with {', '.join(behind)}, marked as a wet room"))
-        if d["type"] == "crack":
-            near = [c for c in plan.get("connections", [])
-                    if np.hypot(c["center"][0] - d["position_m"][0], c["center"][1] - d["position_m"][1]) < 0.6]
-            if near:
-                hyp.append(("C4", "Possible structural movement around the door frame.",
-                            f"crack within 0.6 m of the door between {' and '.join(near[0]['rooms'])}"))
-        d["concealed"] = [{"rule": r, "hypothesis": h, "evidence": e, "label": "hypothesis"} for r, h, e in hyp]
+        cls, sid, (x, y, z) = d["class"], d["surface_id"], d["position"]
+        kind = "ceiling" if sid.endswith(".ceiling") else "floor" if sid.endswith(".floor") else "wall"
+        room = sid.split(".")[0]
+        hits = []
+        if kind == "ceiling" and cls in WET:
+            hits.append(("C1", f"{cls} on the ceiling of {room}"))
+        if kind == "wall" and cls in WET_OR_PAINT and z < LOW_WALL:
+            hits.append(("C2", f"{cls} {z:.2f} m above the floor on {sid} (rule: below {LOW_WALL} m)"))
+        behind = shared_wall_rooms(plan, sid) if kind == "wall" else []
+        if kind == "wall" and cls in WET:
+            wet_behind = [r for r in behind if r in wet_rooms]
+            if wet_behind:
+                hits.append(("C3", f"{cls} on {sid}, a wall shared with {', '.join(wet_behind)} (marked wet)"))
+        if cls == "crack":
+            for o in _doors(plan):
+                if np.hypot(o["center"][0] - x, o["center"][1] - y) < DOOR_NEAR + o["width"]["value"] / 2:
+                    hits.append(("C4", f"crack within {DOOR_NEAR} m of door {o['id']}"))
+                    break
+        H = ceil.get(room)
+        high = kind == "ceiling" or (kind == "wall" and H is not None and z > H - CEILING_BAND)
+        if cls in WET and high:
+            wet_near = [r for r in [room] + behind if r in wet_rooms]
+            if wet_near:
+                hits.append(("C5", f"{cls} high on {sid}, in or next to wet room(s) {', '.join(wet_near)}"))
+        for rule, ev in hits:
+            flags.append({"id": f"C{len(flags) + 1}", "damage_id": d["id"], "rule_id": rule, "rule_text": RULES[rule],
+                          "evidence": ev, "label": "hypothesis"})
+    return flags

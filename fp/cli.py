@@ -88,11 +88,11 @@ def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local",
     try:
         legacy = _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_frames, warn,
                            drift_correction)
-        if damage and backend == "modal":
+        if damage:
             with _timed(timings, "damage"):
-                _assess_damage(legacy, plan, out, wet_rooms, warn)
-        elif damage:
-            warn("damage", "Local damage backend not built yet (work order 06); damage not assessed.")
+                _assess_damage(legacy, plan, out, wet_rooms, warn, backend)
+        else:
+            warn("damage", "Damage not assessed (--no-damage).")
     except StageError as e:
         warn(e.stage, str(e))
     if plan["drift"]["method"] == "none":     # _geometry fills it when poses reached the geometry stage
@@ -442,16 +442,28 @@ def _name_rooms(rooms, bundle, T):
             r["name"] = max(set(votes), key=votes.count)
 
 
-def _assess_damage(legacy, plan, out, wet_rooms, warn):
-    """SAM 3 damage on surfaces + concealed-damage rules (Modal). A failure here never loses the floor plan."""
-    from fp.damage.project import assess
+def _assess_damage(legacy, plan, out, wet_rooms, warn, backend="local"):
+    """Damage on surfaces (Grounding DINO + SAM 2.1 here, or SAM 3 with --backend modal), concealed-damage
+    hypotheses and scope line items. A failure here never loses the floor plan."""
+    from fp.damage.project import assess, to_schema
     from fp.damage.rules import concealed
+    from fp.scope import build
     try:
-        items, _ = assess(legacy["bundle"], legacy, out)
-        concealed(items, legacy, wet_rooms)
-        contract.damage_to_schema(plan, items)
+        items, counts = assess(legacy["bundle"], plan, out, out.parent / "_cache", backend, plan["source"]["cache"])
     except Exception as e:
         warn("damage", f"Damage step failed: {type(e).__name__}: {e}")
+        return
+    plan["damage"] = to_schema(items)
+    plan["concealed"] = concealed(plan["damage"], plan, wet_rooms)
+    plan["scope"] = build(plan)
+    plan["source"]["damage"] = {**{k: v for k, v in counts.items() if k != "unconfirmed"}, "backend": backend,
+                                "unconfirmed": len(counts.get("unconfirmed") or []),
+                                "views": {it["id"]: it["_views"] for it in items}}
+    un = counts.get("unconfirmed") or []
+    if un:
+        warn("damage", f"{len(un)} detection(s) not confirmed from a second viewpoint, so not reported as damage: "
+                       + "; ".join(f"{u['class']} on {u['surface_id']} ({u['score']:.2f}, {u['evidence_image']})"
+                                   for u in un) + ". Reflections, shadows and tile edges look like this.")
 
 
 def _write(plan: dict, out: Path) -> None:

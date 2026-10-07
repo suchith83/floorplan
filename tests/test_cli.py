@@ -119,11 +119,6 @@ def test_render_lists_every_field_error_instead_of_a_traceback(tmp_path):
         render(tmp_path / "missing.json", None)
 
 
-def test_a_damage_box_below_the_floor_is_clipped_not_inverted():
-    b = contract._bbox(1.0, -0.4, 0.3)                           # centre 40 cm below the floor
-    assert b["v0"] <= b["v1"] and b["u0"] <= b["u1"] and b["v0"] == 0.0
-
-
 def test_the_report_badge_shows_the_interval_scale_plainly(tmp_path):
     from fp.report import write_outputs
     plan = json.loads(open("tests/fixtures/plan_two_rooms.json").read())
