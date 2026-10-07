@@ -68,8 +68,14 @@ def test_run_writes_a_valid_plan_even_when_the_capture_is_unreadable(tmp_path):
     assert "total" in plan["timings"]
 
 
-def test_a_video_without_a_local_backend_still_gives_a_valid_plan(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)                         # video.load caches frames under ./out/_cache
+def test_a_video_whose_model_fails_still_gives_a_valid_plan(tmp_path, monkeypatch):
+    """The depth model can fail (no weights offline, out of memory): the plan is still written, with a warning."""
+    from fp.recon import camera
+
+    def boom(*a, **k):
+        raise RuntimeError("MPS backend out of memory")
+    monkeypatch.setattr(camera, "_infer_local", boom)
+    monkeypatch.chdir(tmp_path)
     vid = tmp_path / "walk.mp4"
     vw = cv2.VideoWriter(str(vid), cv2.VideoWriter_fourcc(*"mp4v"), 10, (160, 120))
     rng = np.random.default_rng(0)

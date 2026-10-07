@@ -21,6 +21,7 @@ from fp.bundle import CaptureBundle
 from fp.contract import StageError, StageNotBuilt
 
 PREDICTED_MAX_DEPTH = 5.0  # m; predicted depth is less reliable far away
+CAMERA_VOXEL = 0.02        # m; predicted walls are several cm thick, so a 1 cm voxel only adds points
 ASSUMED_CAMERA_H = 1.2    # m above the floor, used only when no floor is seen
 
 
@@ -33,8 +34,11 @@ def _timed(timings: dict, stage: str):
         timings[stage] = round(time.perf_counter() - t, 2)
 
 
-def reconstruct(bundle: CaptureBundle, work: Path, filter_frames: bool = True, backend: str = "local"):
-    """Bundle -> (bundle with depth, point cloud, frame-filter counts)."""
+def reconstruct(bundle: CaptureBundle, work: Path, filter_frames: bool = True, backend: str = "local",
+                use_cache: bool = True):
+    """Bundle -> (bundle with depth, point cloud, frame-filter counts). Sensor depth is fused as-is; camera-only
+    input gets depth, intrinsics and poses from MapAnything first (fp/recon/camera.py; this machine by default,
+    Modal only with --backend modal), cached under <out>/../_cache/recon."""
     from fp.ingest.quality import select_frames
     from fp.recon.lidar_fuse import fuse_depth
     stats = {}
@@ -46,12 +50,10 @@ def reconstruct(bundle: CaptureBundle, work: Path, filter_frames: bool = True, b
         if filter_frames:
             bundle.frames, stats = select_frames(bundle.frames)
         return bundle, fuse_depth(bundle), stats
-    if backend == "local":
-        raise StageNotBuilt("recon", "Local MapAnything backend not built yet (work order 05); "
-                                     "camera-only tiers need --backend modal for now.")
-    from fp.recon.mapanything import predict_depth
-    bundle = predict_depth(bundle, work / "depth")
-    return bundle, fuse_depth(bundle, max_depth=PREDICTED_MAX_DEPTH), stats
+    from fp.recon import camera
+    bundle, rec = camera.reconstruct(bundle, work / "depth", cache_dir=work.parent / "_cache", backend=backend,
+                                     use_cache=use_cache, voxel=CAMERA_VOXEL, max_depth=PREDICTED_MAX_DEPTH)
+    return bundle, rec, stats
 
 
 def run(capture: Path, out: Path, *, tier: str = "auto", backend: str = "local", drift_correction: bool = True,
@@ -119,11 +121,13 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
     from fp.ingest import load_capture
     from fp.report.debug import bev_png
     with _timed(timings, "ingest"):
-        bundle = load_capture(capture, tier=tier, max_frames=max_frames)
+        bundle = load_capture(capture, tier=tier, max_frames=max_frames, cache_dir=out.parent / "_cache")
     for msg in bundle.meta.get("_warnings", []):
         warn("ingest", msg)
     with _timed(timings, "recon"):
-        bundle, rec, fstats = reconstruct(bundle, out, filter_frames, backend)
+        bundle, rec, fstats = reconstruct(bundle, out, filter_frames, backend, plan["source"]["cache"])
+    for msg in rec.meta.get("warnings", []):
+        warn("recon", msg)
     plan["source"].update(n_frames=len(bundle.frames), frame_filter=fstats,
                           **{k: v for k, v in bundle.meta.items() if not k.startswith("_")})
     with _timed(timings, "align"):
@@ -154,7 +158,7 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
         _name_rooms(rooms, bundle, T)
     contract.fill_from_geometry(plan, rooms, conns)
     plan["frame"]["T_plan_world"] = T.round(6).tolist()
-    plan["source"].update(gravity=al["up_source"], yaw_deg=al["yaw_deg"], camera_h_m=round(al["camera_h"], 2))
+    plan["source"].update(gravity=rec.meta.get("up_source", al["up_source"]), yaw_deg=al["yaw_deg"], camera_h_m=round(al["camera_h"], 2))
     bev_png(out / "debug" / "bev.png", P, N, plan, al["ceiling_h"])
     _fusion_debug(out / "debug", P, N, rec, bundle, T, plan, al["ceiling_h"], wall_lines)
     return {"bundle": bundle, "rooms": rooms, "connections": conns, "T_plan_world": T.round(6).tolist()}
