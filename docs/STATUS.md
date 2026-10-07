@@ -347,6 +347,8 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
 - **What 08/09 need to know:** 09 should take the worst gate above (camera-tier footprint on main). After any fix, `make
   benchmark` refits automatically; the camera-tier b will shrink only if the errors do. Old outputs from before 07 are in
   `../out_pre07/` (outside the repo).
+- **Next:** `Execute prompts/09-fix-loop.md` on the worst gate above. Own captures, when they exist: `data/own/` +
+  `eval/ground_truth/own.yaml` (from TEMPLATE.yaml; A0, converting `ground_truth_raw.txt`, is still to do), then `make benchmark`.
 ## 08 — Capture protocol, device matrix, README, report, compliance matrix: not started
 ## 09 — The fix loop: not started
 ## 10 — Cold-run rehearsal: not started
