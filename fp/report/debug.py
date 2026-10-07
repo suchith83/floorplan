@@ -25,3 +25,65 @@ def bev_png(path, P, N, plan, ceiling_h=None):
             col = (60, 160, 40) if wl["observed"] else (40, 40, 220)
             cv2.line(img, (int(a[0]), int(a[1])), (int(b[0]), int(b[1])), col, 2)
     cv2.imwrite(str(path), img)
+
+
+def _canvas(P, res, pad=0.3):
+    lo = P[:, :2].min(0) - pad
+    w, h = ((P[:, :2].max(0) + pad - lo) / res).astype(int) + 1
+    px = lambda q: np.stack([((q[..., 0] - lo[0]) / res), (h - 1 - (q[..., 1] - lo[1]) / res)], -1).astype(int)
+    return np.full((h, w, 3), 255, np.uint8), px
+
+
+def fusion_topdown_png(path, P, colors, cams, rooms=(), res=0.01):
+    """Top-down view of the fused cloud in plan coordinates: RGB of the highest point in each 1 cm cell,
+    the camera path in red (start = green dot), room polygons in blue with their ids, and a 1 m scale bar."""
+    img, px = _canvas(np.vstack([P[:, :2], cams[:, :2]]), res)
+    o = np.argsort(P[:, 2])                      # draw low first, so the top surface wins
+    q = px(P[o])
+    img[q[:, 1], q[:, 0]] = (colors[o, ::-1] * 255).astype(np.uint8) if colors is not None else 90
+    c = px(cams[:, :2])
+    cv2.polylines(img, [c.reshape(-1, 1, 2)], False, (0, 0, 230), 2)
+    cv2.circle(img, tuple(map(int, c[0])), 7, (0, 170, 0), -1)
+    for r in rooms:
+        poly = px(np.array(r["polygon"]))
+        cv2.polylines(img, [poly.reshape(-1, 1, 2)], True, (220, 120, 0), 2)
+        cx, cy = poly.mean(0).astype(int)
+        cv2.putText(img, r["id"], (int(cx) - 12, int(cy)), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (220, 120, 0), 2)
+    h = img.shape[0]
+    cv2.line(img, (20, h - 20), (20 + int(1 / res), h - 20), (0, 0, 0), 3)
+    cv2.putText(img, "1 m", (20, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1)
+    cv2.imwrite(str(path), img)
+
+
+def wall_slice_png(path, P, N, line, ceiling_h=None, res=0.005, half_depth=0.15, band=0.3):
+    """A thin cut through one wall: points within +-band/2 m (along the wall) of the 10 cm stretch with the most
+    wall points, drawn as (offset from the plane, height). A sharp wall is a thin vertical stripe; smear shows
+    as width. The red lines mark the plane and +-1 robust sigma (the `spread` used for thickness)."""
+    ax, c = line["axis"], line["coord"]
+    o = line["other"]
+    h, e = np.histogram(o, np.arange(o.min(), o.max() + 0.1, 0.1))
+    mid = float(e[np.argmax(h)] + 0.05)
+    sel = (np.abs(P[:, ax] - c) < half_depth) & (np.abs(P[:, 1 - ax] - mid) < band / 2)
+    d, z = P[sel, ax] - c, P[sel, 2]
+    zmax = max(2.0, float(z.max()) if len(z) else 2.0, (ceiling_h or 0) + 0.1)
+    scale = 6                                    # draw the depth axis 6x wider than the height axis
+    W, H = int(2 * half_depth / res * scale), int((zmax + 0.2) / res)
+    img = np.full((H, W, 3), 255, np.uint8)
+    u = ((d + half_depth) / res * scale).astype(int).clip(0, W - 1)
+    v = (H - 1 - (z + 0.1) / res).astype(int).clip(0, H - 1)
+    img[v, u] = (40, 40, 40)
+    s = line["spread_m"]
+    for off, col in ((0.0, (0, 0, 220)), (-s, (120, 120, 255)), (s, (120, 120, 255))):
+        x = int((off + half_depth) / res * scale)
+        cv2.line(img, (x, 0), (x, H - 1), col, 1)
+    for zz in np.arange(0, zmax + 0.01, 0.5):     # height ticks every 50 cm
+        y = int(H - 1 - (zz + 0.1) / res)
+        cv2.line(img, (0, y), (12, y), (0, 0, 0), 1)
+        cv2.putText(img, f"{zz:.1f}m", (14, y + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 0), 1)
+    for cm in (-10, -5, 5, 10):                   # depth ticks every 5 cm
+        x = int((cm / 100 + half_depth) / res * scale)
+        cv2.line(img, (x, H - 1), (x, H - 10), (0, 0, 0), 1)
+    label = f"{'x' if ax == 0 else 'y'}={c:.2f} m at {mid:.1f}  sigma {100 * s:.1f} cm (whole wall)"
+    cv2.putText(img, label, (5, 15), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 200), 1)
+    cv2.putText(img, "x6 horizontal; ticks 5 cm", (5, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 200), 1)
+    cv2.imwrite(str(path), img)

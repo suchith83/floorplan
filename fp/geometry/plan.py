@@ -3,7 +3,9 @@
 Method (explainable, Manhattan):
  1. Wall candidates = peaks in 1-D histograms of vertical-surface points along x and y.
  2. Room footprint = all horizontal surfaces (floor, counter/bed tops, ceiling) rasterised
-    top-down: furniture hides the floor but its top surface is still inside the room.
+    top-down: furniture hides the floor but its top surface is still inside the room. Plus, when the
+    depth rays are given, every cell that several camera->point rays crossed: the sensor saw through
+    that air, so it is inside the room even where the camera never looked down at the floor.
  3. Grid of candidate wall lines -> cells; a cell is interior if the footprint covers it.
     Union of interior cells = rectilinear polygon whose edges sit exactly on wall planes.
  4. An edge with no wall evidence is kept but marked inferred (dashed, low confidence)."""
@@ -61,16 +63,38 @@ def _wall_lines(P, N, H, voxel):
     return lines
 
 
-def _footprint(P, N, H):
+MIN_RAY_HITS = 3   # a cell is seen-through free space if rays from >= 3 frames crossed it (one stray ray,
+                   # e.g. a mirror reflection, must not open a hole through a wall)
+
+
+def _seen_through(rays, o, shape):
+    """rays: list of (camera xyz, (n,3) measured points) per frame, plan coords. Returns, per RES cell, the
+    number of frames whose top-down rays crossed it."""
+    cnt = np.zeros(shape, np.uint16)
+    frame = np.zeros(shape[::-1], np.uint8)          # cv2 draws in (row=j, col=i) order
+    for cam, ends in rays:
+        if not len(ends):
+            continue
+        frame[:] = 0
+        c = tuple(((cam[:2] - o) / RES).astype(int))
+        for e in ((ends[:, :2] - o) / RES).astype(int):
+            cv2.line(frame, c, (int(e[0]), int(e[1])), 1, 1)
+        cnt += frame.T
+    return cnt
+
+
+def _footprint(P, N, H, rays=None):
     # Every horizontal surface between floor and ceiling is inside the room: floor, counter
     # tops, bed tops, cabinet undersides, ceiling. Floor alone under-estimates kitchens.
     top = (H + 0.1) if H else 2.6
     hor = (np.abs(N[:, 2]) > 0.9) & (P[:, 2] > -0.08) & (P[:, 2] < top)
     Q = P[hor, :2]
-    o = Q.min(0) - 0.2
+    o = P[:, :2].min(0) - 0.2                        # grid over the whole cloud: rays end on walls, not floor
+    img = np.zeros(((P[:, :2].max(0) - o) / RES).astype(int) + 1 + int(0.2 / RES), np.uint8)
     ij = ((Q - o) / RES).astype(int)
-    img = np.zeros(ij.max(0) + 1 + int(0.2 / RES), np.uint8)
     img[ij[:, 0], ij[:, 1]] = 1
+    if rays is not None and len(rays[0]):
+        img |= (_seen_through(rays, o, img.shape) >= MIN_RAY_HITS).astype(np.uint8)
     img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
     img = ndimage.binary_fill_holes(img)
     lab, n = ndimage.label(img)
@@ -150,22 +174,22 @@ def length_confidence(source_prior: float, nb_a: dict, nb_b: dict) -> float:
     return round(source_prior * (0.3 + 0.7 * cov) * float(np.exp(-max(0.0, smear - SHARP_WALL) / SMEAR_SCALE)), 2)
 
 
-def extract_room(P, N, ceiling_h, voxel, source_prior, debug: dict | None = None):
+def extract_room(P, N, ceiling_h, voxel, source_prior, debug: dict | None = None, rays=None):
     """The whole footprint as ONE room (single-room scans, the laser eval, fp check).
     debug: if a dict is passed, intermediate results are stored in it."""
     lines = _wall_lines(P, N, ceiling_h, voxel)
-    fp, o = _footprint(P, N, ceiling_h)
+    fp, o = _footprint(P, N, ceiling_h, rays)
     if debug is not None:
         debug.update(lines=lines, footprint=fp, origin=o)
     return _room(fp, o, lines, ceiling_h, source_prior, debug)
 
 
-def extract_rooms(P, N, ceiling_h, voxel, source_prior):
+def extract_rooms(P, N, ceiling_h, voxel, source_prior, rays=None):
     """The whole floor: footprint split into rooms at doorways (fp/geometry/rooms.py), one polygon per
     room on the shared wall lines, and the doors between rooms. Returns (rooms, connections, debug)."""
     from fp.geometry.rooms import doors, split_rooms
     lines = _wall_lines(P, N, ceiling_h, voxel)
-    fp, o = _footprint(P, N, ceiling_h)
+    fp, o = _footprint(P, N, ceiling_h, rays)
     lab = split_rooms(fp, RES)
     rooms = []
     for k in range(1, lab.max() + 1):

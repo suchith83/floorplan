@@ -38,6 +38,10 @@ def reconstruct(bundle: CaptureBundle, work: Path, filter_frames: bool = True, b
     from fp.ingest.quality import select_frames
     from fp.recon.lidar_fuse import fuse_depth
     stats = {}
+    if bundle.frames and all(f.T_wc is not None and f.timestamp is not None for f in bundle.frames):
+        # the whole camera path, before the filter thins it: room occupancy needs time, not kept frames
+        bundle.meta["_trajectory"] = (np.array([f.timestamp for f in bundle.frames]),
+                                      np.array([f.T_wc[:3, 3] for f in bundle.frames]))
     if bundle.has_depth:
         if filter_frames:
             bundle.frames, stats = select_frames(bundle.frames)
@@ -110,7 +114,7 @@ def _validated(plan: dict | Path) -> dict:
 def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_frames, warn) -> dict:
     """Ingest -> recon -> align -> rooms, filling `plan` in place. Returns the internal (pre-schema) result
     that the damage step still works on."""
-    from fp.geometry.align import FloorNotFound, align, to_plan
+    from fp.geometry.align import CEILING_MIN_AREA, FloorNotFound, align, to_plan
     from fp.geometry.plan import extract_room, extract_rooms
     from fp.ingest import load_capture
     from fp.report.debug import bev_png
@@ -128,18 +132,116 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
             al = align(rec, assume_floor_below_camera=ASSUMED_CAMERA_H)
     T = al["T_plan_world"]
     P, N = to_plan(T, rec.points), rec.normals @ T[:3, :3].T
+    if al["ceiling_h"] is None:
+        warn("ceiling", f"No ceiling layer of at least {CEILING_MIN_AREA:g} m2 was seen (highest point "
+                        f"{P[:, 2].max():.2f} m above the floor), so ceiling height is not observed.")
     with _timed(timings, "rooms"):
-        rooms, conns, _ = extract_rooms(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0)
+        rays = _plan_rays(rec, T)
+        rooms, conns, gdbg = extract_rooms(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays)
+        wall_lines = gdbg["lines"]
+        _labels_png(out / "debug" / "rooms_split.png", gdbg)
         if not rooms:
             warn("rooms", "Room split failed; the whole footprint is one room.")
-            rooms, conns = [extract_room(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0)], []
+            rooms, conns = [extract_room(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays=rays)], []
             rooms[0]["id"] = rooms[0]["name"] = "R1"
+        rooms, conns = rank_rooms(rooms, conns, bundle, T, plan, warn)
         _name_rooms(rooms, bundle, T)
     contract.fill_from_geometry(plan, rooms, conns)
     plan["frame"]["T_plan_world"] = T.round(6).tolist()
     plan["source"].update(gravity=al["up_source"], yaw_deg=al["yaw_deg"], camera_h_m=round(al["camera_h"], 2))
     bev_png(out / "debug" / "bev.png", P, N, plan, al["ceiling_h"])
+    _fusion_debug(out / "debug", P, N, rec, bundle, T, plan, al["ceiling_h"], wall_lines)
     return {"bundle": bundle, "rooms": rooms, "connections": conns, "T_plan_world": T.round(6).tolist()}
+
+
+def _plan_rays(rec, T):
+    """Camera->point rays of the fused frames in plan coords (None for inputs without depth frames)."""
+    from fp.geometry.align import to_plan
+    from fp.recon.lidar_fuse import free_space_rays
+    if not rec.frames or any(f.depth is None or f.T_wc is None for f in rec.frames):
+        return None
+    return [(to_plan(T, c[None])[0], to_plan(T, p)) for c, p in free_space_rays(rec.frames)]
+
+
+MIN_ROOM_VISIT_S = 3.0  # s: a room the camera spent less time in was only seen from outside (through a door)
+MAX_DT_S = 0.2          # s: a longer gap between poses is a tracking dropout, not time spent there
+INSIDE_M = 0.3          # m: count only time spent this far inside a room; standing in its doorway doesn't count
+
+
+def room_occupancy(rooms, t: np.ndarray, cams: np.ndarray) -> dict[str, float]:
+    """Seconds the camera spent at least INSIDE_M inside each room polygon (plan x/y). Each pose counts for the
+    time until the next one."""
+    from shapely import contains_xy
+    from shapely.geometry import Polygon
+    dt = np.clip(np.diff(t, append=t[-1]), 0, MAX_DT_S)
+    inner = {r["id"]: Polygon(r["polygon"]).buffer(-INSIDE_M, join_style=2) for r in rooms}
+    return {k: float(dt[contains_xy(p, cams[:, 0], cams[:, 1])].sum()) if not p.is_empty else 0.0
+            for k, p in inner.items()}
+
+
+def rank_rooms(rooms, conns, bundle, T, plan, warn):
+    """Number rooms by the time the camera spent in them (R1 = the room it spent most time in), and warn about
+    rooms it never really entered: they were seen through a doorway, so their walls and area are partial.
+    Those rooms stay in the plan (we don't hide what was seen), flagged in the warnings."""
+    from fp.geometry.align import to_plan
+    traj = bundle.meta.get("_trajectory")
+    if traj is None or not rooms:
+        return rooms, conns
+    t, pos = traj
+    occ = room_occupancy(rooms, t, to_plan(T, pos))
+    order = sorted(rooms, key=lambda r: -occ[r["id"]])
+    new = {r["id"]: f"R{k + 1}" for k, r in enumerate(order)}
+    for r in order:
+        r["occupancy_s"] = round(occ[r["id"]], 1)
+        r["id"] = new[r["id"]]
+        if r["name"] in new:
+            r["name"] = r["id"]
+    for c in conns:
+        c["rooms"] = sorted((new[c["rooms"][0]], new[c["rooms"][1]]), key=lambda i: int(i[1:]))
+    plan["source"]["room_occupancy_s"] = {r["id"]: r["occupancy_s"] for r in order}
+    for r in order:
+        if r["occupancy_s"] < MIN_ROOM_VISIT_S:
+            warn("rooms", f"{r['id']} is partially observed: the camera spent {r['occupancy_s']:.1f} s inside it "
+                          f"(< {MIN_ROOM_VISIT_S:.0f} s), so it was seen mostly through a doorway; its walls and "
+                          f"area are partial.")
+    return order, conns
+
+
+def _labels_png(path, gdbg):
+    """debug/rooms_split.png: the footprint (grey) split into rooms (one colour each), +x right, +y up."""
+    import cv2
+    lab = gdbg["labels"]
+    pal = np.array([[255, 255, 255]] + [[int(v) for v in np.random.default_rng(k).integers(60, 230, 3)]
+                                         for k in range(1, lab.max() + 1)], np.uint8)
+    img = pal[lab]
+    img[(lab == 0) & gdbg["footprint"]] = 160
+    cv2.imwrite(str(path), np.ascontiguousarray(img.transpose(1, 0, 2)[::-1]))
+
+
+def _fusion_debug(debug, P, N, rec, bundle, T, plan, ceiling_h, lines):
+    """debug/fusion_topdown.png (cloud, camera path, rooms) and debug/wall_slice.png (cut through the longest wall)."""
+    from fp.geometry.align import to_plan
+    from fp.report.debug import fusion_topdown_png, wall_slice_png
+    traj = bundle.meta.get("_trajectory")
+    cams = to_plan(T, traj[1] if traj is not None else np.array([f.T_wc[:3, 3] for f in rec.frames]))
+    fusion_topdown_png(debug / "fusion_topdown.png", P, rec.colors, cams, plan["rooms"])
+    if not lines:
+        return
+    # the main room's longest seen wall, matched back to its detected plane
+    seen = [w for w in (plan["rooms"][0]["walls"] if plan["rooms"] else []) if w["observed"]]
+    longest = max(lines, key=lambda l: l["area_m2"])
+    if seen:
+        w = max(seen, key=lambda w: w["length"]["value"])
+        ax = 0 if abs(w["p0"][0] - w["p1"][0]) < 1e-6 else 1
+        cand = [l for l in lines if l["axis"] == ax and abs(l["coord"] - w["p0"][ax]) < 0.03]
+        longest = max(cand, key=lambda l: l["area_m2"]) if cand else longest
+    wall_slice_png(debug / "wall_slice.png", P, N, longest, ceiling_h)
+    sp = [l["spread_m"] for l in lines]
+    plan["source"]["wall_thickness_cm"] = {
+        "median": round(100 * float(np.median(sp)), 2),
+        "longest_wall": round(100 * longest["spread_m"], 2),
+        "n_walls": len(sp),
+        "method": "1.4826 x MAD of wall points within 15 cm of each detected wall plane (fp.geometry.plan.spread)"}
 
 
 def _name_rooms(rooms, bundle, T):
