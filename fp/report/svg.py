@@ -19,6 +19,7 @@ Drawing conventions (also used in the defense notes):
   not touch a wall, a door swing, a room label, a damage pin or an earlier label.
 """
 from __future__ import annotations
+
 import math
 from html import escape
 

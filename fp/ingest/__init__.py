@@ -1,12 +1,13 @@
-"""Input readers. `load_capture` detects the input type, so nothing downstream branches on it."""
+"""Input readers. `detect_tier` and `load_capture` look at the input, so nothing downstream branches on it."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from fp.bundle import CaptureBundle
+from fp.contract import StageNotBuilt
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".3gp", ".mkv", ".webm"}
-PHOTO_EXT = {".jpg", ".jpeg", ".png"}
+PHOTO_EXT = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
 
 
 def is_stray(d: Path) -> bool:
@@ -14,20 +15,37 @@ def is_stray(d: Path) -> bool:
     return (d / "odometry.csv").is_file() and (d / "depth").is_dir()
 
 
-def load_capture(path: Path, *, as_source: str | None = None, max_frames: int | None = None) -> CaptureBundle:
-    """ARKitScenes folder -> LiDAR bundle (or RGB only with as_source='video'|'photos', to test the
-    camera-only paths against the same laser scan); video file -> video bundle; photo folder -> photos."""
+def detect_tier(path: Path) -> str:
+    """Stray or ARKitScenes folder -> lidar; video file -> video; folder of (room folders of) images -> photos.
+    The LiDAR checks come first: their depth/*.png would otherwise pass as photos."""
+    from fp.ingest import arkitscenes
+    path = Path(path)
+    if path.is_dir() and (is_stray(path) or arkitscenes.is_arkitscenes(path)):
+        return "lidar"
+    if path.is_file() and path.suffix.lower() in VIDEO_EXT:
+        return "video"
+    if path.is_dir() and any(p.suffix.lower() in PHOTO_EXT for p in path.rglob("*")):
+        return "photos"
+    raise SystemExit(f"Unrecognised capture: {path}\n"
+                     "Expected a Stray Scanner folder (odometry.csv + depth/), a video file (.mov/.mp4) "
+                     "or a folder of room folders of photos (.jpg/.heic).")
+
+
+def load_capture(path: Path, *, tier: str | None = None, max_frames: int | None = None) -> CaptureBundle:
+    """Capture -> bundle for the requested tier (default: the detected one). A LiDAR capture can also run
+    as video or photos (its RGB alone), to compare tiers on the same rooms."""
     from fp.ingest import arkitscenes, photos, video
     path = Path(path)
-    if arkitscenes.is_arkitscenes(path):
-        if as_source in ("video", "photos"):
-            return arkitscenes.load_rgb_only(path, as_source, max_frames or (120 if as_source == "video" else 24))
+    detected = detect_tier(path)
+    tier = tier or detected
+    if detected == "lidar":
+        if is_stray(path):
+            raise StageNotBuilt("ingest", "Stray Scanner reader not built yet (work order 02).")
+        if tier in ("video", "photos"):
+            return arkitscenes.load_rgb_only(path, tier, max_frames or (120 if tier == "video" else 24))
         return arkitscenes.load(path)
-    if is_stray(path):  # must come before the photo check: depth/*.png would pass as photos
-        raise SystemExit(f"Stray Scanner capture: {path}\nThe Stray Scanner reader is not implemented yet.")
-    if path.is_file() and path.suffix.lower() in VIDEO_EXT:
+    if tier != detected:
+        raise SystemExit(f"--tier {tier} needs a LiDAR capture; {path} is a {detected} capture.")
+    if detected == "video":
         return video.load(path, max_frames=max_frames or video.MAX_KEYFRAMES)
-    if path.is_dir() and any(p.suffix.lower() in PHOTO_EXT for p in path.rglob("*")):
-        return photos.load(path, max_frames=max_frames or photos.MAX_PHOTOS)
-    raise SystemExit(f"Unrecognised capture: {path}\n"
-                     "Expected an ARKitScenes folder, a video file (.mp4/.mov) or a folder of photos (.jpg).")
+    return photos.load(path, max_frames=max_frames or photos.MAX_PHOTOS)
