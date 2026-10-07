@@ -66,7 +66,54 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   locally it's a warning (06).
 - Known gaps: pydantic reports field errors before cross-reference errors (two passes); photos.load still
   ignores HEIC and writes its cache to ./out/_cache (05).
-## 02 — LiDAR tier: Stray Scanner ingest and single room end to end: not started
+## 02 — LiDAR tier: Stray Scanner ingest and single room end to end: **done** (thickness target missed: 2.2 cm vs 2 cm)
+- **Reader** `fp/ingest/stray.py`: odometry.csv poses (OpenCV camera, world y-up, `up=(0,1,0)`), per-frame K,
+  timestamps from odometry (not i/60), `depth/` + `confidence/` paths. `rgb.mp4` decoded once into
+  quarter-res JPEGs under `out/_cache/stray/<id>/` (4.6 s cold for 1,714 frames; marker keyed on size+mtime);
+  `Frame` gained `confidence` and `video_index` (full-res crops for 06). `--tier video` on a Stray folder uses
+  its `rgb.mp4`; `--tier photos` raises StageNotBuilt (05). Broken folders give an `ingest` StageError.
+- **Fusion** (`fp/recon/lidar_fuse.py`): confidence == 2 (`MIN_CONFIDENCE`), 4 m range, quality filter, 1 cm voxel.
+  `free_space_rays` feeds the footprint.
+- **Footprint** (`fp/geometry/plan.py`): horizontal surfaces ∪ cells crossed by top-down camera→point rays from
+  ≥ 3 frames ∪ a 0.3 m band around the camera path (D9). **Rooms** (`fp/cli.py rank_rooms`): R1 = most camera time ≥ 0.3 m inside; rooms with < 3 s
+  are kept and warned "partially observed" (D10). Ceiling not seen → `observed: false` + a `ceiling` warning.
+- **c00a170fe1** (`out/c00a170fe1/`): 11 s warm, 16 s cold (verifier). 383/1,714 frames kept
+  (276 blurry, 237 fast, 818 still). R1 **19.54 m² [18.85, 20.23]**, 6 walls all observed: 6.05 m and 3.41 m
+  outer walls, 4.79 m long side with a 1.26 × 0.87 m notch (kitchen counter); camera 32.1 s inside.
+  R2 6.03 m² (seen through the door, 1.1 s inside → partially observed). Footprint history: floor only
+  12.7 m² → + seen-through rays 15.1 → + camera path 19.5. Ceiling **not observed** (camera pitch
+  −46°…−8°, highest point 1.9 m). Median wall thickness **2.17 cm** (18 walls); slice wall σ 3.0 cm.
+  Debug: `debug/fusion_topdown.png`, `debug/wall_slice.png`, `debug/rooms_split.png`, `debug/bev.png`.
+- **1a8384c3f6**: 42–55 s, 1,308/5,250 frames, 3 rooms (R1 44 m² is several rooms merged, rough), every ceiling
+  `observed: false` (highest point 2.33 m). Median wall thickness 4.18 cm: drift across the flat (03).
+- **Experiment D** (`uv run python scripts/exp02_fusion.py data/stray/c00a170fe1`; same 12 wall planes, median cm):
+
+  | variant | median | mean | fuse s |
+  |---|---|---|---|
+  | conf==2, filter, 2 cm voxel (baseline) | 2.78 | 2.60 | 3.3 |
+  | conf>=1, filter | 2.81 | 2.67 | 3.5 |
+  | conf==2, no filter (all 1,714 frames) | 2.73 | 2.85 | 13.3 |
+  | conf>=1, no filter | 2.93 | 3.00 | 14.0 |
+  | depth i + pose i−2 / i−1 / i+1 / i+2 | 4.12 / 3.14 / 3.49 / 4.35 | | |
+  | conf==2, filter, **1 cm voxel (chosen)** | **2.17** | 2.52 | 6.8 |
+
+- **Verifier** (fresh agent): pytest, cold run < 3 min, schema-valid, 1a83 ceilings not observed, git clean: pass.
+  Its findings, fixed: R1 polygon cut through floor the camera walked on (→ camera-path rule, 15.1 → 19.5 m²);
+  truncated odometry passed silently (→ ingest warning "N frames without a pose"); missing `confidence/` had no
+  warning (→ added); main room on a too-short capture got a "seen through a doorway" warning (→ R1 exempt);
+  `fps_median` 60 was misleading (→ `fps_nominal` 60 + `fps_mean` ≈ 46).
+
+**Known problems / what 03+ need to know**
+- Not fixed: with the floor assumed (truncated 50-row capture), a 0.54 m² placeholder room still gets a ±13 %
+  interval; only a warning says it's rough. 07 should widen intervals (or drop rooms) when the floor is assumed.
+- The bathroom at the bottom of c00a is not split from the living room (doorway neck ratio too wide for
+  `NECK_RATIO`); 1a83 merges several rooms into R1. Room splitting needs work on the whole flat in 03/04.
+- Floor-area `observed: false` (any inferred wall) has no warning explaining why; the method string is the only hint.
+- The longest wall (x = 2.38) shows two stripes ~3 cm apart in `wall_slice.png`: two passes misregistered (drift, 03).
+- Whole-flat walls are 4.2 cm thick vs 2.2 cm single room: drift grows with capture length (03's metric).
+- `plan["source"]` now carries `room_occupancy_s` and `wall_thickness_cm`; the camera path is in
+  `bundle.meta["_trajectory"]` (all frames, before the filter).
+- c7d28f72c6 (with ceiling) not run in this work order.
 ## 03 — Drift accountability and the stitched whole-property plan (LiDAR): not started
 ## 04 — Openings (doors, windows, passages) and per-room ceiling height: not started
 ## 05 — Video and photo tiers (no depth, no poses): not started

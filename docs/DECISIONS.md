@@ -70,3 +70,39 @@ One entry per real decision: context → options → choice → evidence. Newest
 - **Choice.** A stage that isn't built raises `StageNotBuilt`; `fp run` records it as a warning and still
   writes a schema-valid `plan.json`, `plan.svg` and `report.html`. Real errors still raise. The default
   `--backend` is `local`; Modal is opt-in, because the walk-in must run on the evaluator's machine.
+
+## D7. Stray video decoded once into a frame cache
+- **Context.** Stray stores RGB as one HEVC `rgb.mp4`; the rest of the pipeline reads frames as image files.
+  HEVC seeking is slow, and the frame filter needs every frame's sharpness anyway.
+- **Options.** (a) Lazy random-access decode per frame; (b) extract full-res PNGs (1,715 × ~5 MB);
+  (c) one front-to-back decode into quarter-resolution JPEGs under `out/_cache/stray/<id>/`.
+- **Choice.** (c). Frames carry `video_index`, so later stages (damage crops) can fetch full resolution.
+  K is scaled to the cached size; timestamps come from `odometry.csv`, never i/60.
+- **Evidence.** Cold decode of c00a170fe1 (1,714 frames) takes 4.6 s, cached 0.1 s; total run 11 s.
+
+## D8. Fusion settings chosen by measured wall thickness
+- **Context.** Back-projected LiDAR walls should be thin; thickness (robust sigma of wall points) is a
+  direct, ground-truth-free measure of fusion quality.
+- **Options.** confidence ≥ 1 vs == 2; quality filter on/off; depth↔pose offset −2..+2 frames; 1 vs 2 cm voxel.
+- **Choice.** confidence == 2, filter on, offset 0, 1 cm voxel, 4 m range.
+- **Evidence.** `scripts/exp02_fusion.py data/stray/c00a170fe1`, 12 largest wall planes, median thickness:
+  baseline (conf 2, filter, 2 cm) 2.78 cm; conf ≥ 1 2.81; no filter 2.73 (mean 2.85 vs 2.60, 4× slower);
+  offsets −2/−1/+1/+2: 4.12/3.14/3.49/4.35 (0 is right); 1 cm voxel 2.17 cm (fuse 6.8 s vs 3.3 s).
+
+## D9. Footprint includes air the sensor saw through
+- **Context.** On c00a170fe1 the camera faced the fridge, sofa and wardrobe, not the floor, so the
+  floor-only footprint lost most of the living area (R1 12.7 m²).
+- **Options.** (a) Floor + horizontal surfaces only; (b) add the camera path; (c) add top-down
+  camera→point rays (a 2D free-space carve); (d) TSDF free space.
+- **Choice.** (c) and (b): a 2 cm cell is inside if rays from ≥ 3 frames crossed it (one mirror reflection
+  can't punch through a wall), and a 0.3 m band around the camera path is always inside (the person stood
+  there). Both exist for every posed tier, so neither is LiDAR-specific.
+- **Evidence.** R1 12.7 → 15.1 (rays) → 19.5 m² (camera path); the verifier found the polygon cutting through
+  floor the camera walked on before (b). `debug/fusion_topdown.png`, `debug/rooms_split.png`.
+
+## D10. The main room is the one the camera spent most time in
+- **Context.** A single-room capture also sees neighbouring rooms through doorways.
+- **Choice.** Rank rooms by camera time at least 0.3 m inside each polygon (R1 = most); rooms with < 3 s are
+  kept in the plan but warned as "partially observed". Time, not frame count: the filter drops still frames.
+- **Evidence.** c00a170fe1: R1 32.1 s, R2 (glimpsed through the door) 1.1 s → warned. Without the 0.3 m
+  inset R2 scored 3.0 s because the camera stood in the doorway. On 1a8384c3f6, 3 of 4 rooms are visited.
