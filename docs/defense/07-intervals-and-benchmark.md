@@ -1,8 +1,8 @@
 # 07 — Calibrated intervals and the benchmark: defense notes
 
 **The numbers to remember:** LiDAR wall intervals were fitted at **k = 1.42** on 16 wall-to-wall spans from the two scans of
-the same flat, with held-out coverage of **94 %**. The worst gate is **video wall lengths on c7d2: p90 error 105 % vs 3 %**.
-`make benchmark` regenerates everything in **500 s**. Gates: 3 pass, 13 fail, 10 can't be scored without tape.
+the same flat; held-out coverage only **81 %** (fails a strict 90 %). The worst gate is **video wall lengths on c7d2: p90 error 105 % vs 3 %**.
+`make benchmark` regenerates everything in **500 s**. Gates: 2 pass, 14 fail, 10 can't be scored without tape.
 
 **1. What does your 90 % interval mean?**
 It's a claim about frequency: across many measurements like this one, at least 9 in 10 true values fall inside
@@ -17,8 +17,8 @@ I used stand-ins for the truth, and each one is named in every table.
 - **Video and photos:** I compared them with the LiDAR plan of the same capture.
 
 The model is the one from 01: half = k × (evidence term) + b × value. LiDAR fits k; the camera tiers fit b. I fit on
-one half of the evidence and check coverage on the other half, both ways round. LiDAR held-out coverage is 88 % and
-100 % (8 spans each). Repeatability only shows precision: if both scans were 2 cm too long, I couldn't see it without tape.
+one half of the evidence and check coverage on the other half, both ways round. LiDAR held-out coverage is 62 % and
+100 % (8 spans each; folds split by room so no wall plane is in both), 81 % overall: below 90 %, reported as a fail. Repeatability only shows precision: if both scans were 2 cm too long, I couldn't see it without tape.
 
 **3. How much ground truth do you have? Be honest about n.**
 None from tape. The user's own captures and tape readings don't exist yet; the format, the matcher and the slots are
@@ -49,7 +49,8 @@ every `make benchmark`, so when 09 fixes the footprint, b shrinks with the error
 No threshold moved after I saw a result. I had to define gates the brief leaves open, and these definitions are in
 D07.3 and in the code with comments:
 - "within ±X %" means at least 90 % of walls are within X %;
-- calibration passes at 80 % or more held-out coverage, because at n ≈ 10, one miss in ten is noise.
+- calibration passes only at 90 % or more held-out coverage. I first used 80 % ("one miss in ten is noise"); the
+  verifier called it flattering, so it's strict now, and LiDAR fails it at 81 %.
 
 The fitted constants are fitted on the sample data by design. That's what calibration is, and the held-out columns
 show how they do on data they weren't fitted on.

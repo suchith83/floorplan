@@ -309,7 +309,7 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   automatically and scored against `eval/ground_truth/<capture>.yaml` or `own.yaml`.
 - **Truth stand-ins** (D07.2): camera tiers vs the LiDAR plan of the same capture; LiDAR by the repeat pair; c7d2 openings by eye
   (`eval/ground_truth/c7d28f72c6.openings_by_eye.yaml`). Rows that need tape are NOT SCORED and name the slot.
-- **Gates:** PASS 3 (drift ablation ×2, LiDAR calibration held-out), FAIL 13, NOT SCORED 10, NOT DONE 1 (head-to-head).
+- **Gates:** PASS 2 (drift ablation ×2), FAIL 14, NOT SCORED 10, NOT DONE 1 (head-to-head).
   | gate | capture | number | result |
   |---|---|---|---|
   | openings (by eye, widths not taped) | c7d28f72c6 | 7/14 = 50 % (13 real, 1 phantom, 4 missed, 2 wrong kind) | FAIL |
@@ -317,11 +317,11 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   | video walls ±3 % | c00a / c7d2 video | p90 63 % / **105 %** | FAIL |
   | video footprint ±3 % | c00a / c7d2 video | −12 % / **−79 %** (13.2 vs 62.6 m²) | FAIL |
   | photo walls ±8 % | c00a / c7d2 photos | p90 24 % / 62 % | FAIL |
-  | photo stitch | c7d2 photos | 11.98 vs 68.47 m² (−82 %), 0 m² overlap, adjacency wrong (extra R2–R3) | FAIL |
-  | calibration held-out coverage, walls | lidar / video / photos | 94 % of 16 / 78 % of 9 / 67 % of 12 | PASS / FAIL / FAIL |
+  | photo stitch | c7d2 / c00a photos | 11.98 vs 57.35 m² (−79 %), adjacency wrong (extra R2–R3) / 5.26 vs 17.71 m² (−70 %); 0 m² overlap | FAIL |
+  | calibration held-out coverage, walls (strict 90 %) | lidar / video / photos | 81 % of 16 / 78 % of 9 / 67 % of 12 | FAIL / FAIL / FAIL |
   | LiDAR per-wall edges (stress set) | 1a83 vs c7d2 | 61 % of 23 covered | FAIL |
 - **Single worst gate: video wall lengths on `c7d28f72c6-video`: p90 |error| 105 % vs the 3 % gate (35× the threshold); 0 of 6
-  matched walls within ±3 %.** Same root cause as the #2 (c7d2 video footprint −79 %) and #4 (c7d2 photo stitch −82 %): on main
+  matched walls within ±3 %.** Same root cause as the #2 (c7d2 video footprint −79 %) and #3 (c7d2 photo stitch −79 %): on main
   the camera-tier cloud is cut to fragments. Pre-merge (track/camera) the same c7d2 video replay gave one 82.2 m² room (IoU 0.66);
   on main it gives 2 rooms, 13.2 m² (IoU 0.18). Suspects: 03's whole-flat stitch (walls cut back out of the footprint, doorways
   closed along wall lines, room filter) and `MIN_RAY_HITS` (D05.9) applied to noisy learned depth. Not fixed here: that is 09.
@@ -330,6 +330,13 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   photos wall b = **3.12**, area 3.0. Camera-tier intervals are now ±240–310 % of a wall, i.e. "we don't know" (honest; in-sample the
   reference now sits inside all of them, held-out 67–78 %; before, 17–67 %). Not calibrated (no evidence): ceilings, openings, damage extents.
   `plan.intervals.calibrated` is true for every tier with a fit, and `method` names the stand-in evidence.
+- **Verifier** (fresh agent): numbers reproduce by hand (7/14, 0/16, k = 1.4235 from the rows); lo ≥ 0 and lo ≤ value ≤ hi
+  on 97 Measures; adversarial GT (doubled walls, wrong yaml) scored large and didn't crash. Its findings, fixed: photo-stitch
+  reference came from an old LiDAR segmentation (68.47 m², more than the whole flat) → selection polygons moved into the
+  current LiDAR frame and clipped to its footprint (57.35 m²); LiDAR 2-fold leaked (interleaved spans shared wall planes) →
+  folds by room (held-out 94 % → **81 %**); calibration PASS band was 80 % → strict 90 %; `benchmark-tables` refitted the
+  constants → `--no-fit`; report text claimed "reference measurements" → names the stand-in evidence. Noted, not fixed: spans
+  only include planes matched within 10 cm (optimistic k); camera constants are fitted on the captures the gates score.
 - **Also:** `eval/gt.py` + `eval/match_gt.py` + `eval/ground_truth/TEMPLATE.yaml` (tape format, matcher by room name / wall
   direction / length + override file, scorer; 11 tests). `eval/HEAD_TO_HEAD.md` (substitute protocol; LiDAR row not done).
   Fixes: openings no longer scaled by the tier twice; `lo` clipped at 0; tests pinned to D5 (`tests/conftest.py`). **149 tests.**

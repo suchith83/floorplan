@@ -399,8 +399,8 @@ numbered D05.x so the merge doesn't clash. -->
   `fp/calibration.json` (written by `make benchmark`); `fp run` reads them, records the k, b it used in
   `plan.source.interval_model`, and sets `intervals.calibrated` + a method string that names the evidence.
   Deleting the file returns to D5.
-- **Evidence.** One parameter per cell is all n = 3–16 can support. Held-out (2-fold) LiDAR wall coverage 88 % and
-  100 % (8 rows each); in-sample every set is covered (eval/CALIBRATION.md).
+- **Evidence.** One parameter per cell is all n = 3–16 can support. Held-out (2-fold by room) LiDAR wall coverage 62 % and
+  100 % (8 rows each, 81 % overall), video 78 %, photos 67 %; in-sample every set is covered (eval/CALIBRATION.md).
 
 ## D07.2. What stands in for tape on the sample data
 - **Context.** No tape on the evaluator's captures; the user's own captures and tape don't exist yet (8 Oct).
@@ -410,7 +410,8 @@ numbered D05.x so the merge doesn't clash. -->
   set**, checked but not fitted: they also move when the two scans split rooms at different doorways
   (segmentation, not noise). Camera tiers: the video/photo plans against the LiDAR plan of the same capture, the
   reference's own error charged to the camera tier. Folds: by capture for camera tiers; interleaved rows for
-  LiDAR (spans cluster in two rooms, so a split by room gave 14 vs 2).
+  LiDAR split by room, balanced greedily (8 vs 8 spans): an interleaved split leaked, because spans in one room
+  share wall planes (verifier).
 - **Evidence.** LiDAR span k = 1.42 (spans median |Δ| 5.5 cm); LiDAR area k = 5.6 (room splits differ); stress
   set coverage 61 % (14/23): stated plainly as a known failure, not hidden. Repeatability shows precision only;
   a bias shared by both scans is invisible without tape.
@@ -418,8 +419,8 @@ numbered D05.x so the merge doesn't clash. -->
 ## D07.3. Gate definitions where the brief is silent, and the "worst gate" ranking
 - **Context.** "Wall lengths within ±8 %" doesn't say for how many walls; calibration has no numeric gate.
 - **Choice.** A "within X" gate over many walls passes when ≥ 90 % are within X (the same 9 in 10 our intervals
-  state), i.e. p90 |error| ≤ X. Calibration passes at held-out coverage ≥ 80 % (with n ≈ 10, one miss in ten is
-  sampling noise around 90 %); this band is stated next to the number. Repeatability passes only if every span is
+  state), i.e. p90 |error| ≤ X. Calibration passes at held-out coverage ≥ 90 % (first 80 %, "one miss in ten is
+  noise"; the verifier called that flattering, so strict). Repeatability passes only if every span is
   within 1 cm or 0.5 %. Worst gate = the failing gate furthest from its threshold in threshold units (p90 error ÷
   tolerance, or required rate ÷ achieved rate). Gates without truth say NOT SCORED and name the slot.
 - **Evidence.** Worst gate: c7d2 video wall lengths, p90 105 % vs 3 % (35×). Every choice above is a constant in
