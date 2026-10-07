@@ -15,6 +15,8 @@ class Frame:
     T_wc: np.ndarray | None = None       # 4x4 camera-to-world (metres)
     depth: Path | None = None            # uint16 PNG, millimetres
     timestamp: float | None = None
+    confidence: Path | None = None       # uint8 PNG 0/1/2 at depth resolution (Stray Scanner / ARKit)
+    video_index: int | None = None       # frame number in the source video, for full-resolution crops
 
 
 @dataclass

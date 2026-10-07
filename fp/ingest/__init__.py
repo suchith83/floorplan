@@ -40,7 +40,15 @@ def load_capture(path: Path, *, tier: str | None = None, max_frames: int | None 
     tier = tier or detected
     if detected == "lidar":
         if is_stray(path):
-            raise StageNotBuilt("ingest", "Stray Scanner reader not built yet (work order 02).")
+            if tier == "video":   # the capture's own RGB video, without its depth or poses
+                return video.load(path / "rgb.mp4", max_frames=max_frames or video.MAX_KEYFRAMES)
+            if tier == "photos":
+                raise StageNotBuilt("ingest", "Stills from a Stray capture as photo input arrive in work order 05.")
+            from fp.ingest import stray
+            bundle = stray.load(path)
+            if not bundle.frames:
+                raise StageError("ingest", f"No frames with depth in {path}.")
+            return bundle
         if tier in ("video", "photos"):
             return arkitscenes.load_rgb_only(path, tier, max_frames or (120 if tier == "video" else 24))
         return arkitscenes.load(path)

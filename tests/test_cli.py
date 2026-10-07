@@ -54,7 +54,7 @@ def _fake_stray(d):
     return d
 
 
-def test_run_writes_a_valid_plan_even_when_the_reader_is_missing(tmp_path):
+def test_run_writes_a_valid_plan_even_when_the_capture_is_unreadable(tmp_path):
     from fp.schema import validate
     out = tmp_path / "out"
     plan = run(_fake_stray(tmp_path / "cap"), out)
