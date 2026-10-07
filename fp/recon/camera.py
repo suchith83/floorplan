@@ -23,9 +23,10 @@ Three jobs on top of the model:
     points disagree in 3D, it is re-placed by a Sim(3) on those matches. A room with no link at all
     is not placed (its frames are dropped from the plan) and named in a warning, never overlapped.
 
-Gravity: the cameras' mean "up" is only a guess (a phone may be held sideways or tilted), so each of the four in-image directions is tried and refined onto the horizontal surfaces
-(floor, ceiling, table tops); the winner has the floor below the cameras. The result is checked against a
-plane fitted to the floor.
+Gravity: image up (phone camera apps orient images by the accelerometer; the ingest applies EXIF and video
+rotation tags) refined onto the horizontal surfaces (floor, ceiling, table tops); a sideways in-image axis
+replaces it only with twice its support. The sign puts the floor below the cameras. The result is checked
+against a plane fitted to the floor.
 Scale: metric scale comes from the model alone (it learned the size of things: doors, tiles, furniture).
 It is sanity-checked against priors (handheld camera 1.0-1.8 m above the floor, ceiling 2.3-3.2 m); a
 disagreement widens every interval by the relative gap (contract.fill_from_geometry), never rescales."""
@@ -60,6 +61,8 @@ MIN_MATCHES = 40      # RANSAC inliers between two photos of different rooms tha
 MATCH_SIDE = 800      # px, longest side for feature matching
 MATCH_AGREE_M = 0.25  # m, median 3D disagreement of matched points above which a room is re-placed
 # Gravity and scale priors
+OVERRULE_UP = 2.0     # another in-image axis must have 2x image-up's horizontal support to replace it (c7d2
+                      # photos: wall axis 0.206 vs image up 0.197 -- a big wall nearly ties with the floor)
 CAM_H = (1.0, 1.8)    # m: a handheld phone, standing adult
 CEILING_H = (2.3, 3.2)  # m: residential ceilings (low 2.3 m modern flats to 3.2 m older buildings)
 
@@ -484,20 +487,23 @@ def _refine_up(N: np.ndarray, up: np.ndarray) -> tuple[np.ndarray, float]:
 
 
 def estimate_gravity(rec: Recon) -> tuple[np.ndarray, dict]:
-    """Try each in-image direction (camera -y, +y, -x, +x averaged over all views) as the start, refine onto
-    horizontal surfaces, and keep the one with most horizontal support. A sideways start can't tell up from
-    down, so the sign is chosen so that the larger horizontal layer 0.8-2.0 m from the cameras is below them
-    (the floor: handheld cameras look level or down, so they see more floor than ceiling)."""
+    """Start from image up (the cameras' mean -y): a phone camera app sets the image orientation from its
+    accelerometer, and the ingest applies EXIF / video rotation tags, so image up is close to gravity. Refine
+    it onto the normals of horizontal surfaces. The other in-image directions (+-x) are tried too, but only
+    overrule image up when they gather more than OVERRULE_UP x its horizontal support (an input stored
+    sideways with no tag); a near tie means a big wall, not the floor. The sign is chosen so that the larger
+    horizontal layer 0.8-2.0 m from the cameras is below them (the floor: handheld cameras look level or
+    down, so they see more floor than ceiling)."""
     R = np.array([f.T_wc[:3, :3] for f in rec.frames])
-    starts = {"-y": -R[:, :, 1].mean(0), "+y": R[:, :, 1].mean(0), "-x": -R[:, :, 0].mean(0), "+x": R[:, :, 0].mean(0)}
-    best = None
+    starts = {"-y": -R[:, :, 1].mean(0), "-x": -R[:, :, 0].mean(0)}   # +y / +x refine to the same axes
+    refined = {}
     for name, u in starts.items():
-        if np.linalg.norm(u) < 1e-6:
-            continue
-        up, support = _refine_up(rec.normals, u / np.linalg.norm(u))
-        if best is None or support > best[2] + 1e-9:
-            best = (name, up, support)
-    name, up, support = best
+        if np.linalg.norm(u) > 1e-6:
+            refined[name] = _refine_up(rec.normals, u / np.linalg.norm(u))
+    name = "-y" if "-y" in refined else "-x"
+    if "-x" in refined and "-y" in refined and refined["-x"][1] > OVERRULE_UP * refined["-y"][1]:
+        name = "-x"
+    up, support = refined[name]
     cams = np.array([f.T_wc[:3, 3] for f in rec.frames])
     h = rec.points @ up - np.median(cams @ up)
     horiz = np.abs(rec.normals @ up) > 0.95
@@ -506,7 +512,8 @@ def estimate_gravity(rec: Recon) -> tuple[np.ndarray, dict]:
     above = np.sum(horiz & (h > 0.8) & (h < 2.0))
     if above > below:
         up = -up
-    return up, {"start": name, "horizontal_support": round(support, 3)}
+    return up, {"start": name, "horizontal_support": round(support, 3),
+                "support_by_start": {k: round(v[1], 3) for k, v in refined.items()}}
 
 
 def floor_check(rec: Recon, up: np.ndarray) -> float | None:
@@ -603,7 +610,7 @@ def reconstruct(bundle: CaptureBundle, work: Path, cache_dir: Path, backend: str
     up, ginfo = estimate_gravity(rec)
     rec.up = up
     ginfo["floor_plane_angle_deg"] = None if (a := floor_check(rec, up)) is None else round(a, 2)
-    rec.meta["up_source"] = "estimated (horizontal surfaces, 4 starts; checked against the floor plane)"
+    rec.meta["up_source"] = "estimated (image up refined on horizontal surfaces; checked against the floor plane)"
     sc = scale_check(rec)
     if sc["extra_rel"] > 0:
         warnings.append(f"Metric scale disagrees with priors ({sc['note']}); every interval is widened by "

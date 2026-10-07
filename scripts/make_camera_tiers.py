@@ -38,6 +38,9 @@ How stills are chosen (same constants for every capture, no per-capture tuning):
     candidates (seen only through a door) get no photos and are listed as "not photographed";
     connections touching them get no doorway still.
 
+EXIF: each still carries FocalLengthIn35mmFilm from the frame's Stray intrinsics (rounded to an integer,
+as an iPhone writes it), so the photo tier gets the same intrinsics prior a real phone photo gives.
+
 Upright stills: each still is rotated by k*90 deg so that world up points closest to image up (what a
 phone camera app does with its accelerometer); a portrait-held frame becomes 1440x1920. The rotation is
 recorded as `rotated_deg` (clockwise) in selection.json.
@@ -137,9 +140,19 @@ def tag_rotation(src: Path, dst: Path, clockwise_deg: int) -> None:
     subprocess.run(cmd, check=True)
 
 
-def write_stills(video: Path, targets: dict[int, list[Path]], rot: dict[int, int]) -> None:
+FULL_FRAME_DIAG_MM = 43.27   # diagonal of a 36x24 mm frame: the 35-mm-equivalent focal is defined on it
+
+
+def focal_35mm(fx: float, size=(1920, 1440)) -> int:
+    """The EXIF FocalLengthIn35mmFilm an iPhone writes for this lens: an integer, on the diagonal."""
+    return int(round(fx * FULL_FRAME_DIAG_MM / float(np.hypot(*size))))
+
+
+def write_stills(video: Path, targets: dict[int, list[Path]], rot: dict[int, int], f35: dict[int, int]) -> None:
     """Decode front to back once; rotate each wanted frame upright (rot[i] deg clockwise), write it to
-    its first path and copy that file byte-for-byte to the others."""
+    its first path with the EXIF FocalLengthIn35mmFilm f35[i] (every phone photo carries it) and copy that
+    file byte-for-byte to the others."""
+    from PIL import Image
     cap = cv2.VideoCapture(str(video))
     i, last = 0, max(targets)
     while i <= last:
@@ -151,7 +164,9 @@ def write_stills(video: Path, targets: dict[int, list[Path]], rot: dict[int, int
             first.parent.mkdir(parents=True, exist_ok=True)
             if _ROTATE[rot[i]] is not None:
                 img = cv2.rotate(img, _ROTATE[rot[i]])
-            cv2.imwrite(str(first), img, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+            exif = Image.Exif()
+            exif.get_ifd(0x8769)[0xA405] = f35[i]   # Exif IFD -> FocalLengthIn35mmFilm
+            Image.fromarray(img[..., ::-1]).save(first, quality=JPEG_QUALITY, exif=exif)
             for p in rest:
                 p.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(first, p)
@@ -290,7 +305,7 @@ def process(capture: Path, out_root: Path) -> dict:
     rot = {i: all_rot[i] for i in reasons}
     targets = {i: [out / "photos" / rid / f"f{i:06d}.jpg" for rid in e["rooms"]] for i, e in sorted(reasons.items())}
     if targets:
-        write_stills(capture / "rgb.mp4", targets, rot)
+        write_stills(capture / "rgb.mp4", targets, rot, {i: focal_35mm(od["K"][i, 0, 0]) for i in targets})
 
     stills = [{"frame": i, "timestamp": round(float(od["t"][i]), 6),
                "files": [str(p.relative_to(out)) for p in targets[i]], "rooms": e["rooms"], "why": e["why"],
@@ -298,6 +313,7 @@ def process(capture: Path, out_root: Path) -> dict:
                "camera_room": room_of[i], "camera_xy": [round(float(v), 3) for v in pos[i, :2]],
                "camera_height_m": round(float(pos[i, 2]), 3), "yaw_deg": round(float(np.degrees(yaw[i])), 1),
                "pitch_deg": round(float(pitch[i]), 1), "rotated_deg": rot[i],
+               "focal_35mm": focal_35mm(od["K"][i, 0, 0]),
                "size_wh": [1440, 1920] if rot[i] in (90, 270) else [1920, 1440]} for i, e in sorted(reasons.items())]
     room_out = []
     for r in rooms:

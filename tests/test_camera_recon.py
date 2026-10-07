@@ -104,8 +104,8 @@ def _room_cloud(up: np.ndarray, cams_world: np.ndarray):
 
 
 def test_gravity_from_a_sideways_phone():
-    """Portrait phone, landscape-stored frames: the image x axis points to gravity. The cameras' mean -y
-    is horizontal, so the old single start fails; trying all four in-image directions finds the floor."""
+    """Portrait phone, landscape-stored frames with no rotation tag: the image x axis points to gravity and
+    the cameras' mean -y is horizontal. Floor + ceiling outweigh the wall by > 2x, so the x axis overrules."""
     up = np.array([0.0, 0.0, 1.0])
     P, N, R = _room_cloud(up, None)
     frames = []
@@ -120,7 +120,7 @@ def test_gravity_from_a_sideways_phone():
     rec = Recon(points=P, normals=N, up=None, frames=frames)
     est, info = camera.estimate_gravity(rec)
     assert est @ up > 0.99, (est, info)
-    assert info["start"] in ("-x", "+x")
+    assert info["start"] == "-x"
     assert camera.floor_check(rec, est) < 1.0
 
 
@@ -149,3 +149,25 @@ def test_photo_rooms_without_any_link_are_left_unplaced(tmp_path):
     g = camera._photo_groups(b, warnings)
     assert g["groups"] == [[0, 1, 2]] and g["unplaced"] == ["attic"]
     assert any("attic" in w and "NOT placed" in w for w in warnings)
+
+
+def test_gravity_keeps_image_up_when_a_big_wall_nearly_ties():
+    """Upright photos in a flat with a long wall: the wall's normals almost tie with the floor's. Image up
+    must win (only a 2x larger support may overrule it)."""
+    up = np.array([0.0, 0.0, 1.0])
+    rng = np.random.default_rng(1)
+    floor = np.c_[rng.uniform(-3, 3, (3000, 2)), np.full(3000, -1.5)]
+    wall = np.c_[np.full(3200, 2.0), rng.uniform(-3, 3, 3200), rng.uniform(-1.5, 1.1, 3200)]
+    P = np.r_[floor, wall]
+    N = np.r_[np.tile([0, 0, 1.0], (3000, 1)), np.tile([-1.0, 0, 0], (3200, 1))]
+    frames = []
+    for yaw in np.linspace(-40, 40, 6):            # all looking roughly at the wall, phone upright
+        fwd = np.array([np.cos(np.radians(yaw)), np.sin(np.radians(yaw)), -0.3])
+        fwd /= np.linalg.norm(fwd)
+        y = -up + (fwd @ up) * fwd                   # image down = gravity projected into the image
+        y /= np.linalg.norm(y)
+        T = np.eye(4)
+        T[:3, :3] = np.c_[np.cross(y, fwd), y, fwd]
+        frames.append(Frame(rgb=Path("x.jpg"), T_wc=T))
+    est, info = camera.estimate_gravity(Recon(points=P, normals=N, up=None, frames=frames))
+    assert info["start"] == "-y" and est @ up > 0.99, info
