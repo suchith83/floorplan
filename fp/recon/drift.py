@@ -391,6 +391,36 @@ def plane_corrections(subs: list[Submap], up=np.array([0, 1.0, 0])):
     return C, yaws, float(np.degrees(g))
 
 
+HEADING_WINDOW_DEG = 10.0  # wall normals within 10 deg of the global axes count as walls when measuring heading
+
+
+def heading_spread(subs, C, up=np.array([0, 1.0, 0])):
+    """Std (deg) across submaps of each submap's median wall-normal deviation from the global Manhattan axes,
+    before (identity) and after the corrections. Heading drift makes later submaps' walls turn away from the
+    earlier ones; a correction that removes it shrinks this spread. A rotation of the whole map doesn't change it."""
+    x, y, z = _horizontal_basis(_unit(up))
+
+    def angles(N):
+        return np.mod(np.arctan2(N[np.abs(N @ z) < 0.2] @ y, N[np.abs(N @ z) < 0.2] @ x), np.pi / 2)
+
+    def spread(normals):
+        a = [angles(N) for N in normals]
+        if not any(len(v) for v in a):
+            return float("nan")
+        h, e = np.histogram(np.concatenate(a), bins=180, range=(0, np.pi / 2))
+        g = e[np.argmax(h)]
+        meds = []
+        for v in a:
+            d = np.mod(v - g + np.pi / 4, np.pi / 2) - np.pi / 4
+            d = d[np.abs(d) <= np.radians(HEADING_WINDOW_DEG)]
+            if len(d) * REG_VOXEL ** 2 >= PLANE_MIN_AREA:
+                meds.append(np.median(d))
+        return float(np.degrees(np.std(meds))) if len(meds) > 1 else float("nan")
+
+    return (spread([s.normals for s in subs]),
+            spread([s.normals @ c[:3, :3].T for s, c in zip(subs, C)]))
+
+
 def loop_residuals(subs, loops, C):
     """Median point-to-plane RMS (cm) over accepted loops, before (identity) and after the corrections."""
     b, a = [], []
@@ -485,6 +515,8 @@ def correct_drift(frames: list[Frame], up=np.array([0, 1.0, 0]), method: str = "
         # consecutive submaps share surfaces too: a correction must not tear them apart
         before, after = odometry_residuals(subs, C)
         metrics["odom_rmse_before_cm"], metrics["odom_rmse_after_cm"] = round(before, 2), round(after, 2)
+        before, after = heading_spread(subs, C, up)
+        metrics["heading_spread_before_deg"], metrics["heading_spread_after_deg"] = round(before, 2), round(after, 2)
         for r in loops:
             r["T"] = np.asarray(r["T"]).round(6).tolist()
 

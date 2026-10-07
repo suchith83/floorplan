@@ -80,12 +80,13 @@ def main():
         rows.append((v, q["thickness_median_cm"], q["n_walls"], len(q["double_walls"]),
                      m.get("n_submaps", "-"), f"{m.get('n_loop_accepted', '-')}/{m.get('n_loop_candidates', '-')}",
                      m.get("loop_rmse_before_cm", float("nan")), m.get("loop_rmse_after_cm", float("nan")),
+                     m.get("heading_spread_before_deg", float("nan")), m.get("heading_spread_after_deg", float("nan")),
                      m.get("max_correction_cm", 0.0), m.get("max_correction_deg", 0.0), t_drift, t_fuse))
         for d in q["double_walls"]:
             print(f"   [{v}] double wall axis {'xy'[d['axis']]} {d['coord_a']:.2f}/{d['coord_b']:.2f} "
                   f"gap {d['gap_cm']} cm overlap {d['overlap_m']} m faces {d['faces']:+d}")
     print(f"\n{a.capture.name}: {len(frames)} frames kept of {len(b.frames)}")
-    hdr = ("variant", "thick_cm", "walls", "doubles", "submaps", "loops", "loop_b_cm", "loop_a_cm",
+    hdr = ("variant", "thick_cm", "walls", "doubles", "submaps", "loops", "loop_b_cm", "loop_a_cm", "head_b_deg", "head_a_deg",
            "max_corr_cm", "max_corr_deg", "drift_s", "fuse_s")
     print("| " + " | ".join(hdr) + " |")
     print("|" + "---|" * len(hdr))

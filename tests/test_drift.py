@@ -114,6 +114,16 @@ def test_plane_method_snaps_yaw():
     assert np.allclose(C[2][:3, :3] @ UP, UP)
 
 
+def test_heading_spread_drops_when_drift_is_undone_and_ignores_a_global_turn():
+    P, N = _room()
+    cams = np.array([[2.0, 1.4, 2.5]])
+    yaws = [0.0, 1.0, 2.0, 3.0]                       # heading drifting 1 deg per submap
+    subs = [_sub(P, N, cams, 3.0 * k, _T(a, [0, 0, 0])) for k, a in enumerate(yaws)]
+    undo = np.stack([_T(-a + 5.0, [0, 0, 0]) for a in yaws])   # undo the drift, then turn everything 5 deg
+    before, after = drift.heading_spread(subs, undo, UP)
+    assert abs(before - np.std(yaws)) < 0.2 and after < 0.1
+
+
 def test_yaw_only_keeps_gravity_and_pivot():
     T = np.eye(4)
     T[:3, :3] = drift._rot_about([0.1, 1, 0.05], np.radians(2.0))   # a correction with a little tilt
