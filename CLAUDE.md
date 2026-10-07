@@ -6,7 +6,7 @@ into one whole-property plan: per-room walls, ceiling height, floor area, openin
 damage regions and scope line items, with an interval on every number. One command per capture,
 one JSON schema for every tier, and it runs cold on an evaluator's laptop (no calls to our cloud).
 Brief: [docs/brief/applied_ai_brief.md](docs/brief/applied_ai_brief.md). Strategy and work orders:
-`planning/GAMEPLAN.md` and `planning/prompts/` (local only, gitignored).
+`planning/GAMEPLAN.md` and `prompts/` (work orders, `CHECKLIST.md`; local only, not committed).
 
 ## Where things stand
 Read `docs/STATUS.md` (one section per work order 00–10) and `docs/DECISIONS.md` before starting.

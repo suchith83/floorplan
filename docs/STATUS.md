@@ -1,6 +1,6 @@
 # Status
 
-One section per work order (`planning/prompts/NN-*.md`). Each session updates its own section at
+One section per work order (`prompts/NN-*.md`). Each session updates its own section at
 hand-off: done / not done, real numbers, known bugs, and what the next work order needs to know.
 
 ## 00 — Repo setup and port of the prototype: **done**
