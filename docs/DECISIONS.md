@@ -260,3 +260,60 @@ numbered D05.x so the merge doesn't clash. -->
 - **Choice.** (c), chosen by the user. Proposed fix after the merge: `MIN_RAY_HITS` by tier (1–2 for photos),
   and a per-room footprint from each folder's photos so the folder labels define the rooms.
 - **Evidence.** Photo-tier rooms are undersized: c00a R1 5.4 m² vs 19.5 m² LiDAR reference (eval/cross_tier_sample.md).
+
+## D04.1. Openings: ray casting on wall elevations, not holes in the point cloud
+- **Context.** A gap in a wall's points is either an opening or a part of the wall nobody looked at (behind a
+  wardrobe, above the camera's view). 03's doorways were floor-footprint necks: a width with ±10 cm and no height.
+- **Options.** (a) gaps in the wall's point band; (b) floor necks (03); (c) an RGB door/window detector;
+  (d) per wall, an elevation grid (along-wall × height) where every depth ray votes: ended on the plane
+  (wall), crossed it and ended > 5 cm behind (seen through), or never reached it (unobserved).
+- **Choice.** (d) (`fp/geometry/openings.py`): 2 cm cells, every 4th depth pixel, frames counted not rays,
+  a cell is empty when ≥ 60 % of the ≥ 2 frames that reached it saw through. Door = empty region from the floor,
+  0.6–1.6 m wide, lintel 1.9–2.4 m; window = sill 0.3–1.5 m; passage = floor gap > 1.6 m or no lintel below the
+  ceiling, and another room behind it. 03's necks stay only between rooms no measured opening links (warned).
+- **Evidence.** Synthetic scene: a 0.90 m door measured within 2 cm; a wall behind a wardrobe stays unobserved,
+  not empty (tests/test_openings.py). c7d28f72c6: 12 openings, e.g. R1.O1 door 0.904 m with lintel 2.08 m;
+  44 s for 55 walls on 2,629 frames. 2 cm cells, not the work order's 1 cm: one frame's rays are ~4 cm apart at
+  2 m, so 1 cm cells would hold no votes; the width comes from points, not cells.
+
+## D04.2. Width between jamb planes; no RGB refinement
+- **Context.** The gate is ±2 cm on width; one LiDAR depth pixel is ~1 cm at 2 m.
+- **Options.** (a) the empty region's width (cell-rounded, blurred by ray density); (b) each jamb = median
+  along-wall position of reveal points (vertical surfaces inside the wall thickness facing into the opening,
+  2–35 cm behind the face, so casings standing proud of the wall are left out); fallback: the 95th
+  percentile of the wall-face points next to the gap; (c) (b) plus vertical RGB edges at 1920×1440.
+- **Choice.** (b). Interval half = Σ per jamb (1 cm × tier scale + jamb σ, + 2 cm for a wall-end fallback);
+  a jamb with neither ("region edge") makes width `observed: false`. (c) not built: the work order allows it
+  only "if it measurably helps", and the sample data has no tape widths to show that it does.
+- **Evidence.** c7d28f72c6 doors 0.713–0.915 m, reveal σ 1–5 cm per jamb, half-widths 5–12 cm (provisional,
+  07 calibrates).
+
+## D04.3. Mirror and recess tests; a door-shaped recess is a closed door
+- **Context.** A mirror makes the sensor "see" a room behind the wall; a niche or recessed panel is seen
+  > 5 cm behind the plane. Both look like openings to (D04.1). RGB sheets on c7d28f72c6 showed a bathroom mirror
+  (R7.W6, "window" 1.64 m) and a recessed panel at the corridor end (R2.W4, "window" 0.90 m).
+- **Options.** (a) accept them; (b) RGB classifier; (c) geometry: mirror = reflect the points behind the gap
+  back across the plane, and if ≥ 50 % land within 3 cm of the room's own surfaces it is the room again;
+  recess = a room-facing surface < 40 cm behind the plane over ≥ 50 % of the gap.
+- **Choice.** (c). A recess with a door's shape is kept as a **closed door** (its leaf sits back in the frame):
+  R2.W5 on c7d28f72c6 was rejected as a recess until the RGB sheet showed the handle.
+- **Evidence.** c7d28f72c6: the mirror scores only 0.48 (real doors 0.09–0.37), so it is caught by the recess
+  test (0.92), not the mirror test; c00a170fe1 R3.W4 mirror 0.98; the recessed panel 1.00. Mirror threshold
+  not tuned to these numbers (0.5 = "most of it"). Known limit: a leaf < 5 cm behind the face is "wall" (HIT_TOL).
+
+## D04.4. A door whose top was never seen
+- **Context.** On c00a170fe1 the camera pitched −46°…−8°: rays never cross a door plane above ~1.4 m, so no
+  lintel is seen and the door rule (head 1.9–2.4 m) found nothing.
+- **Choice.** A floor gap 0.6–1.6 m wide with *unobserved* (not wall) cells above is a door if it was seen
+  through up to ≥ 1.2 m (above counters and sofa backs); its height is `observed: false`.
+- **Evidence.** c00a170fe1: 0 → 2 doors (0.92 m R2–R3).
+
+## D04.5. Ceiling per room: largest down-facing layer 2.1–3.6 m above the room's own floor
+- **Context.** One flat-wide ceiling (2.44 m on c7d2) hid rooms at 3.09 m.
+- **Options.** lower bound 1.8 m (work order) vs 2.1 m (align.CEILING_RANGE); count points vs patches.
+- **Choice.** (`fp/geometry/ceiling.py`) inside the polygon, layers ≥ 1 m² 2.1–3.6 m above the room's floor
+  (up-facing points within ±5 cm of z = 0, fallback the plan floor +3 cm); value = medians' difference; half =
+  1 cm + 1.645 √(σc²/patches_c + σf²/patches_f), patches = 25 cm squares the layer covers (errors are
+  correlated within a patch, so points are not independent samples). Other layers → `ceiling` warnings.
+- **Evidence.** 1.8 m admits kitchen cabinet undersides (round 1 picked 1.86 m). c7d28f72c6: 2.33–2.49 m in
+  6 rooms, 3.04 / 3.09 m in R3 / R4, R6 not observed; 1a8384c3f6 and c00a170fe1: every room not observed.
