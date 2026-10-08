@@ -53,7 +53,7 @@
     <path d="M272,85 A16,16 0 0 1 288,85"/><path d="M357,85 A16,16 0 0 1 373,85"/>
   </g>
   <g fill="#333" font-size="11" text-anchor="middle">
-    <text x="280" y="125">spot 1</text><text x="365" y="125">spot 2</text>
+    <text x="280" y="125">corner 1</text><text x="365" y="125">corner 2</text>
   </g>
 
   <!-- legend -->
@@ -61,8 +61,8 @@
     <line x1="150" y1="282" x2="190" y2="282" stroke="#d55e00" stroke-width="2.5" stroke-dasharray="6 4"/>
     <text x="198" y="286">walk, 0.5 m per second (video and LiDAR)</text>
     <circle cx="170" cy="304" r="6" fill="#d55e00"/>
-    <text x="198" y="308">stand still 2 s in every doorway</text>
+    <text x="198" y="308">stand still 2 s each time you pass a doorway</text>
     <use href="#cam" x="160" y="318" width="20" height="16"/>
-    <text x="198" y="330">photos: 2 spots per room, turn so each photo overlaps half the last</text>
+    <text x="198" y="330">photos: 2 opposite corners per room, each photo overlaps half the last</text>
   </g>
 </svg>

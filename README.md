@@ -12,13 +12,15 @@ scope. Every number comes with a 90 % interval. One command per capture; everyth
 ## Prerequisites
 
 - macOS or Linux, 16 GB RAM (the video tier peaked at 14.3 GB), about 15 GB free disk
-  (Python environment 2 GB, model weights 5.8 GB, sample data and cache 2.2 GB, plus the uv download cache).
-- `git`.
+  (Python environment 2 GB on a Mac, more on Linux x86 where PyTorch pulls its CUDA wheels; model weights 5.8 GB;
+  sample data and cache 2.2 GB; plus the uv download cache).
+- `git`, and `unzip` (preinstalled on macOS; `sudo apt install unzip` on minimal Linux).
 - `uv`: `curl -LsSf https://astral.sh/uv/install.sh | sh` (then open a new terminal). uv downloads Python 3.12
   itself. ffmpeg comes bundled (the `imageio-ffmpeg` package); you don't install it.
 
-Tested on an Apple M5 MacBook (16 GB, MPS). Linux has not been tested; it should run on CPU, and the video tier will
-be much slower there (not timed). See [docs/DEVICE_MATRIX.md](docs/DEVICE_MATRIX.md#laptop).
+Tested on an Apple M5 MacBook (16 GB, MPS). Linux has not been tested. It should run on CPU; the LiDAR tier does not
+need the big model, but the video and photo tiers will be much slower on CPU (not timed): use an NVIDIA GPU there, or
+`--backend modal` (paid, opt-in). See [docs/DEVICE_MATRIX.md](docs/DEVICE_MATRIX.md#laptop).
 
 ## Quick start
 
@@ -41,6 +43,8 @@ out/c00a170fe1/debug/        one image per pipeline stage
 ```
 
 `fetch_data.sh` downloads from the Hugging Face dataset named in `FP_DATA_REPO` (default `suchith83/floorplan-data`).
+If it stops with **401 / Repository Not Found**, the dataset is still private: run `uv run hf auth login` with a token
+that has read access (ask the author for access), then rerun the script. It downloads only what is missing.
 `fetch_weights.sh` pre-downloads `facebook/map-anything-apache` (depth and poses for video and photos, 4.9 GB),
 `IDEA-Research/grounding-dino-tiny` and `facebook/sam2.1-hiera-small` (damage detection, 0.9 GB together). The
 LiDAR tier needs only the two damage models, so the first LiDAR plan does not wait for the 4.9 GB download.
@@ -68,7 +72,7 @@ directly in it (not in room folders) is refused with a message saying how to fix
 | LiDAR, whole flat (`c7d28f72c6`) | about 4 min |
 | Video, live model | 338 s (1 room) to 511 s (whole flat) |
 | Video, replayed from the cache | 14 s to 72 s |
-| Photos, live model | about 50 s for 7 to 17 photos |
+| Photos, live model | about 50 s for 7 to 17 photos (one model pass); a 5-room home (~40 photos) needs 2 passes, about 2.5 min (estimated, not timed) |
 
 Model outputs are cached under `out/_cache/`, keyed by the input bytes. A rerun on the same input replays them;
 `--no-cache` forces the live model. A new capture always runs live.

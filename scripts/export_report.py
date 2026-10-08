@@ -1,9 +1,10 @@
 """docs/REPORT.md -> docs/REPORT.pdf (A4) through headless Chrome.
 
-Usage: uv run python scripts/export_report.py
+Usage: uv run python scripts/export_report.py                          # docs/REPORT.md -> docs/REPORT.pdf
+       uv run python scripts/export_report.py CAPTURE_PROTOCOL.md      # any markdown file -> same name .pdf
 Markdown -> HTML with the `markdown` package (tables, fenced code), print CSS, then Chrome's --print-to-pdf.
-Image paths in the markdown are relative to docs/, so the HTML is written into docs/ (and deleted afterwards).
-Prints the page count, because the brief caps the report at 6 pages."""
+Image paths in the markdown are relative to its folder, so the HTML is written next to it (and deleted afterwards).
+Prints the page count, because the brief caps the report at 6 pages and the protocol at one."""
 from __future__ import annotations
 
 import re
@@ -16,8 +17,7 @@ import markdown
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCS = ROOT / "docs"
-SRC, PDF = DOCS / "REPORT.md", DOCS / "REPORT.pdf"
-HTML = DOCS / "_report_print.html"   # next to REPORT.md so relative image paths resolve
+SRC = DOCS / "REPORT.md"
 
 CSS = """
 @page { size: A4; margin: 15mm; }
@@ -49,7 +49,7 @@ def find_chrome() -> str:
     for c in CHROMES:
         if Path(c).exists() or shutil.which(c):
             return c
-    sys.exit("no Chrome/Chromium found; install one or print docs/_report_print.html by hand")
+    sys.exit("no Chrome/Chromium found; install one, or open the .md rendered on GitHub and print it")
 
 
 def page_count(pdf: Path) -> int:
@@ -61,15 +61,17 @@ def page_count(pdf: Path) -> int:
 
 
 def main() -> None:
-    body = markdown.markdown(SRC.read_text(encoding="utf-8"), extensions=["tables", "fenced_code"])
-    HTML.write_text(f'<!doctype html><html><head><meta charset="utf-8"><title>Technical report</title>'
+    src = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else SRC
+    pdf, html = src.with_suffix(".pdf"), src.with_name("_print.html")   # next to src so relative image paths resolve
+    body = markdown.markdown(src.read_text(encoding="utf-8"), extensions=["tables", "fenced_code"])
+    html.write_text(f'<!doctype html><html><head><meta charset="utf-8"><title>{src.stem}</title>'
                     f"<style>{CSS}</style></head><body>{body}</body></html>", encoding="utf-8")
     try:
         subprocess.run([find_chrome(), "--headless", "--disable-gpu", "--no-pdf-header-footer",
-                        f"--print-to-pdf={PDF}", HTML.as_uri()], check=True, capture_output=True, timeout=120)
+                        f"--print-to-pdf={pdf}", html.as_uri()], check=True, capture_output=True, timeout=120)
     finally:
-        HTML.unlink(missing_ok=True)
-    print(f"{PDF.relative_to(ROOT)}: {page_count(PDF)} pages, {PDF.stat().st_size / 1024:.0f} KB")
+        html.unlink(missing_ok=True)
+    print(f"{pdf.relative_to(ROOT)}: {page_count(pdf)} pages, {pdf.stat().st_size / 1024:.0f} KB")
 
 
 if __name__ == "__main__":
