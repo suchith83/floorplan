@@ -1,0 +1,124 @@
+{
+ "source": "sample-data stand-ins (no tape): LiDAR repeat pair 1a8384c3f6 vs c7d28f72c6; camera tiers vs the LiDAR plan of the same capture (eval/CALIBRATION.md)",
+ "generated": "2026-10-08",
+ "constants": {
+  "lidar": {
+   "wall_length": {
+    "k": 1.4236,
+    "b": 0.0,
+    "fitted": true,
+    "n": 16,
+    "small_n": false,
+    "raw": 1.4235,
+    "floored": false
+   },
+   "perimeter": {
+    "k": 1.4236,
+    "b": 0.0,
+    "fitted": true,
+    "n": 0,
+    "small_n": false,
+    "raw": 1.4235,
+    "floored": false,
+    "from": "wall_length"
+   },
+   "floor_area": {
+    "k": 5.6067,
+    "b": 0.0,
+    "fitted": true,
+    "n": 6,
+    "small_n": true,
+    "raw": 5.6067,
+    "floored": false
+   },
+   "ceiling": {
+    "k": 1.0,
+    "b": 0.0,
+    "fitted": false
+   },
+   "opening": {
+    "k": 1.0,
+    "b": 0.0,
+    "fitted": false
+   }
+  },
+  "video": {
+   "wall_length": {
+    "k": 1.0,
+    "b": 2.4142,
+    "fitted": true,
+    "n": 9,
+    "small_n": false,
+    "raw": 2.4142,
+    "floored": false
+   },
+   "perimeter": {
+    "k": 1.0,
+    "b": 0.4196,
+    "fitted": true,
+    "n": 3,
+    "small_n": true,
+    "raw": 0.4195,
+    "floored": false
+   },
+   "floor_area": {
+    "k": 1.0,
+    "b": 0.5663,
+    "fitted": true,
+    "n": 3,
+    "small_n": true,
+    "raw": 0.5662,
+    "floored": false
+   },
+   "ceiling": {
+    "k": 1.0,
+    "b": 0.03,
+    "fitted": false
+   },
+   "opening": {
+    "k": 1.0,
+    "b": 0.03,
+    "fitted": false
+   }
+  },
+  "photos": {
+   "wall_length": {
+    "k": 1.0,
+    "b": 3.1202,
+    "fitted": true,
+    "n": 12,
+    "small_n": false,
+    "raw": 3.1201,
+    "floored": false
+   },
+   "perimeter": {
+    "k": 1.0,
+    "b": 1.0069,
+    "fitted": true,
+    "n": 4,
+    "small_n": true,
+    "raw": 1.0068,
+    "floored": false
+   },
+   "floor_area": {
+    "k": 1.0,
+    "b": 3.0088,
+    "fitted": true,
+    "n": 4,
+    "small_n": true,
+    "raw": 3.0087,
+    "floored": false
+   },
+   "ceiling": {
+    "k": 1.0,
+    "b": 0.08,
+    "fitted": false
+   },
+   "opening": {
+    "k": 1.0,
+    "b": 0.08,
+    "fitted": false
+   }
+  }
+ }
+}

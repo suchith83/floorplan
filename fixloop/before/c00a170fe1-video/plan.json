@@ -1,0 +1,728 @@
+{
+ "schema_version": "1.0",
+ "tier": "video",
+ "capture_id": "c00a170fe1",
+ "device": null,
+ "frame": {
+  "up": "z",
+  "floor_z": 0.0,
+  "units": "m",
+  "T_plan_world": [
+   [
+    0.42585,
+    0.442513,
+    -0.789198,
+    0.0
+   ],
+   [
+    0.902931,
+    -0.151909,
+    0.402043,
+    0.0
+   ],
+   [
+    0.058023,
+    -0.883802,
+    -0.464249,
+    1.346681
+   ],
+   [
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ]
+  ]
+ },
+ "intervals": {
+  "level": 0.9,
+  "scale": 3.0,
+  "calibrated": true,
+  "method": "half = k*a + b*value; fitted on sample-data stand-ins (no tape): LiDAR repeat pair 1a8384c3f6 vs c7d28f72c6; camera tiers vs the LiDAR plan of the same capture (eval/CALIBRATION.md): wall_length (b=2.41, n=9), perimeter (b=0.42, n=3), floor_area (b=0.566, n=3); provisional: ceiling, opening"
+ },
+ "source": {
+  "path": "data/derived/c00a170fe1/video/c00a170fe1.mp4",
+  "scale": "MapAnything metric depth (learned)",
+  "backend": "local",
+  "cache": true,
+  "interval_model": {
+   "wall_length": {
+    "k": 1.0,
+    "b": 2.4142
+   },
+   "perimeter": {
+    "k": 1.0,
+    "b": 0.4196
+   },
+   "floor_area": {
+    "k": 1.0,
+    "b": 0.5663
+   },
+   "ceiling": {
+    "k": 1.0,
+    "b": 0.03
+   },
+   "opening": {
+    "k": 1.0,
+    "b": 0.03
+   }
+  },
+  "n_frames": 109,
+  "frame_filter": {},
+  "file": "c00a170fe1.mp4",
+  "duration_s": 37.17,
+  "fps": 46.12,
+  "codec": "hevc",
+  "bit_depth": 8,
+  "hdr": null,
+  "rotation_deg": -90.0,
+  "frames_sampled": 112,
+  "dropped_blurry_or_still": 3,
+  "keyframes": 109,
+  "recon": {
+   "backend": "local",
+   "model": "facebook/map-anything-apache",
+   "views": 109,
+   "passes": 6,
+   "chunk_merges": [
+    {
+     "chunk": 2,
+     "views": [
+      18,
+      41
+     ],
+     "shared_frames": 6,
+     "scale": 0.9935,
+     "median_residual_m": 0.1961
+    },
+    {
+     "chunk": 3,
+     "views": [
+      36,
+      59
+     ],
+     "shared_frames": 6,
+     "scale": 0.9675,
+     "median_residual_m": 0.0498
+    },
+    {
+     "chunk": 4,
+     "views": [
+      54,
+      77
+     ],
+     "shared_frames": 6,
+     "scale": 1.1142,
+     "median_residual_m": 0.2786
+    },
+    {
+     "chunk": 5,
+     "views": [
+      72,
+      95
+     ],
+     "shared_frames": 6,
+     "scale": 0.986,
+     "median_residual_m": 0.3937
+    },
+    {
+     "chunk": 6,
+     "views": [
+      85,
+      108
+     ],
+     "shared_frames": 11,
+     "scale": 0.956,
+     "median_residual_m": 0.8812
+    }
+   ],
+   "metric_vote_correction": [
+    0.9953
+   ],
+   "cache_keys": [
+    "25d75e1d8d66d517a83d4d4ee5b95230bfc25379",
+    "32e574c638d830fe1af80d9698e9f3e0023ef23e",
+    "c0919ba0f86f1c79977ed60b4dd2bffc259d156b",
+    "0c2c1c0e48c40c2738bc8c8e4a1c117cc749ae88",
+    "071a9a5d5b07aaa34cfe80b0578de594f9fc6bfd",
+    "45651ec3f349d9481b0a978dbb5654ebdab4bc67"
+   ],
+   "gravity": {
+    "start": "-y",
+    "horizontal_support": 0.181,
+    "support_by_start": {
+     "-y": 0.181,
+     "-x": 0.071
+    },
+    "floor_plane_angle_deg": 0.22
+   },
+   "scale_check": {
+    "camera_h_m": 1.254,
+    "ceiling_h_m": null,
+    "priors": {
+     "camera_h_m": [
+      1.0,
+      1.8
+     ],
+     "ceiling_h_m": [
+      2.3,
+      3.2
+     ]
+    },
+    "extra_rel": 0.0,
+    "note": "within priors"
+   },
+   "metric_scale_model": 1.134
+  },
+  "room_occupancy_s": {
+   "R1": 10.8,
+   "R2": 0.0
+  },
+  "wall_plane_pos": {
+   "R1.W1": 0.09,
+   "R1.W2": 0.119,
+   "R1.W3": 0.14,
+   "R1.W4": 0.081,
+   "R1.W5": 0.075,
+   "R1.W6": 0.1,
+   "R1.W7": 0.088,
+   "R1.W8": 0.044,
+   "R2.W1": 0.11,
+   "R2.W2": 0.1,
+   "R2.W3": 0.09,
+   "R2.W4": 0.102,
+   "R2.W5": 0.102,
+   "R2.W6": 0.1
+  },
+  "gravity": "estimated (image up refined on horizontal surfaces; checked against the floor plane)",
+  "yaw_deg": 25.25,
+  "camera_h_m": 1.25,
+  "wall_thickness_cm": {
+   "median": 7.02,
+   "longest_wall": 7.0,
+   "n_walls": 27,
+   "method": "1.4826 x MAD of wall points within 15 cm of each detected wall plane (fp.geometry.plan.spread)"
+  },
+  "damage": {
+   "frames": 30,
+   "detections": 7,
+   "no_depth": 0,
+   "no_surface": 6,
+   "off_surface": 0,
+   "confirm_frames": 2,
+   "items": 0,
+   "backend": "local",
+   "unconfirmed": 1,
+   "views": {}
+  }
+ },
+ "rooms": [
+  {
+   "id": "R1",
+   "name": "R1",
+   "polygon": [
+    [
+     -4.7616,
+     0.3637
+    ],
+    [
+     -4.7616,
+     -2.41
+    ],
+    [
+     -1.4545,
+     -2.41
+    ],
+    [
+     -1.4545,
+     -1.7904
+    ],
+    [
+     1.8062,
+     -1.7904
+    ],
+    [
+     1.8062,
+     1.272
+    ],
+    [
+     -1.6767,
+     1.272
+    ],
+    [
+     -1.6767,
+     0.3637
+    ]
+   ],
+   "floor_area": {
+    "value": 19.36,
+    "lo": 6.6087,
+    "hi": 32.1113,
+    "unit": "m2",
+    "method": "polygon area on wall planes",
+    "observed": false
+   },
+   "ceiling_height": {
+    "value": null,
+    "lo": null,
+    "hi": null,
+    "unit": "m",
+    "method": "no down-facing layer of at least 1 m\u00b2 2.1\u20133.6 m above the floor inside R1; highest down-facing point 1.90 m",
+    "observed": false
+   },
+   "perimeter": {
+    "value": 20.5,
+    "lo": 10.4242,
+    "hi": 30.5758,
+    "unit": "m",
+    "method": "sum of wall lengths",
+    "observed": false
+   },
+   "walls": [
+    {
+     "id": "R1.W1",
+     "p0": [
+      -4.7616,
+      0.3637
+     ],
+     "p1": [
+      -4.7616,
+      -2.41
+     ],
+     "length": {
+      "value": 2.774,
+      "lo": 0.0,
+      "hi": 9.634,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": false,
+     "coverage": 0.0
+    },
+    {
+     "id": "R1.W2",
+     "p0": [
+      -4.7616,
+      -2.41
+     ],
+     "p1": [
+      -1.4545,
+      -2.41
+     ],
+     "length": {
+      "value": 3.307,
+      "lo": 0.0,
+      "hi": 11.5208,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes (a neighbour was inferred)",
+      "observed": false
+     },
+     "observed": true,
+     "coverage": 0.09
+    },
+    {
+     "id": "R1.W3",
+     "p0": [
+      -1.4545,
+      -2.41
+     ],
+     "p1": [
+      -1.4545,
+      -1.7904
+     ],
+     "length": {
+      "value": 0.62,
+      "lo": 0.0,
+      "hi": 2.3168,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": true,
+     "coverage": 0.92
+    },
+    {
+     "id": "R1.W4",
+     "p0": [
+      -1.4545,
+      -1.7904
+     ],
+     "p1": [
+      1.8062,
+      -1.7904
+     ],
+     "length": {
+      "value": 3.261,
+      "lo": 0.0,
+      "hi": 11.3487,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": true,
+     "coverage": 0.85
+    },
+    {
+     "id": "R1.W5",
+     "p0": [
+      1.8062,
+      -1.7904
+     ],
+     "p1": [
+      1.8062,
+      1.272
+     ],
+     "length": {
+      "value": 3.062,
+      "lo": 0.0,
+      "hi": 10.6353,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": true,
+     "coverage": 0.98
+    },
+    {
+     "id": "R1.W6",
+     "p0": [
+      1.8062,
+      1.272
+     ],
+     "p1": [
+      -1.6767,
+      1.272
+     ],
+     "length": {
+      "value": 3.483,
+      "lo": 0.0,
+      "hi": 12.0547,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": true,
+     "coverage": 0.62
+    },
+    {
+     "id": "R1.W7",
+     "p0": [
+      -1.6767,
+      1.272
+     ],
+     "p1": [
+      -1.6767,
+      0.3637
+     ],
+     "length": {
+      "value": 0.908,
+      "lo": 0.0,
+      "hi": 3.2441,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": true,
+     "coverage": 0.0
+    },
+    {
+     "id": "R1.W8",
+     "p0": [
+      -1.6767,
+      0.3637
+     ],
+     "p1": [
+      -4.7616,
+      0.3637
+     ],
+     "length": {
+      "value": 3.085,
+      "lo": 0.0,
+      "hi": 10.7108,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes (a neighbour was inferred)",
+      "observed": false
+     },
+     "observed": true,
+     "coverage": 0.07
+    }
+   ],
+   "openings": []
+  },
+  {
+   "id": "R2",
+   "name": "R2",
+   "polygon": [
+    [
+     1.5776,
+     -4.0511
+    ],
+    [
+     3.0776,
+     -4.0511
+    ],
+    [
+     3.0776,
+     -2.7956
+    ],
+    [
+     1.0792,
+     -2.7956
+    ],
+    [
+     1.0792,
+     -3.5467
+    ],
+    [
+     1.5776,
+     -3.5467
+    ]
+   ],
+   "floor_area": {
+    "value": 2.26,
+    "lo": 0.332,
+    "hi": 4.188,
+    "unit": "m2",
+    "method": "polygon area on wall planes",
+    "observed": false
+   },
+   "ceiling_height": {
+    "value": null,
+    "lo": null,
+    "hi": null,
+    "unit": "m",
+    "method": "no down-facing layer of at least 1 m\u00b2 2.1\u20133.6 m above the floor inside R2; highest down-facing point 1.37 m",
+    "observed": false
+   },
+   "perimeter": {
+    "value": 6.506,
+    "lo": 2.5681,
+    "hi": 10.4439,
+    "unit": "m",
+    "method": "sum of wall lengths",
+    "observed": false
+   },
+   "walls": [
+    {
+     "id": "R2.W1",
+     "p0": [
+      1.5776,
+      -4.0511
+     ],
+     "p1": [
+      3.0776,
+      -4.0511
+     ],
+     "length": {
+      "value": 1.5,
+      "lo": 0.0,
+      "hi": 5.3213,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": true,
+     "coverage": 0.8
+    },
+    {
+     "id": "R2.W2",
+     "p0": [
+      3.0776,
+      -4.0511
+     ],
+     "p1": [
+      3.0776,
+      -2.7956
+     ],
+     "length": {
+      "value": 1.255,
+      "lo": 0.0,
+      "hi": 4.4848,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes (a neighbour was inferred)",
+      "observed": false
+     },
+     "observed": true,
+     "coverage": 0.72
+    },
+    {
+     "id": "R2.W3",
+     "p0": [
+      3.0776,
+      -2.7956
+     ],
+     "p1": [
+      1.0792,
+      -2.7956
+     ],
+     "length": {
+      "value": 1.998,
+      "lo": 0.0,
+      "hi": 7.0236,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": false,
+     "coverage": 0.0
+    },
+    {
+     "id": "R2.W4",
+     "p0": [
+      1.0792,
+      -2.7956
+     ],
+     "p1": [
+      1.0792,
+      -3.5467
+     ],
+     "length": {
+      "value": 0.751,
+      "lo": 0.0,
+      "hi": 2.7561,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes (a neighbour was inferred)",
+      "observed": false
+     },
+     "observed": true,
+     "coverage": 0.93
+    },
+    {
+     "id": "R2.W5",
+     "p0": [
+      1.0792,
+      -3.5467
+     ],
+     "p1": [
+      1.5776,
+      -3.5467
+     ],
+     "length": {
+      "value": 0.498,
+      "lo": 0.0,
+      "hi": 1.9023,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": true,
+     "coverage": 0.11
+    },
+    {
+     "id": "R2.W6",
+     "p0": [
+      1.5776,
+      -3.5467
+     ],
+     "p1": [
+      1.5776,
+      -4.0511
+     ],
+     "length": {
+      "value": 0.504,
+      "lo": 0.0,
+      "hi": 1.9328,
+      "unit": "m",
+      "method": "distance between neighbouring wall planes",
+      "observed": true
+     },
+     "observed": true,
+     "coverage": 0.6
+    }
+   ],
+   "openings": [
+    {
+     "id": "R2.O1",
+     "kind": "door",
+     "wall_id": "R2.W4",
+     "rooms": null,
+     "width": {
+      "value": 0.757,
+      "lo": 0.5957,
+      "hi": 0.9183,
+      "unit": "m",
+      "method": "distance between jamb planes (reveal)",
+      "observed": true
+     },
+     "height": {
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "unit": "m",
+      "method": "lintel not observed",
+      "observed": false
+     },
+     "sill": null,
+     "center": [
+      1.079,
+      -3.477
+     ]
+    }
+   ]
+  }
+ ],
+ "connections": [],
+ "footprint_area": {
+  "value": 21.62,
+  "lo": 6.9407,
+  "hi": 36.2993,
+  "unit": "m2",
+  "method": "sum of room floor areas",
+  "observed": false
+ },
+ "drift": {
+  "method": "not applicable: poses come from the reconstruction itself (camera tiers)",
+  "enabled": false,
+  "metrics": {
+   "thickness_median_cm": 7.0180867169672645,
+   "double_walls": 9,
+   "footprint_m2": 26.82
+  }
+ },
+ "damage": [],
+ "concealed": [],
+ "scope": [],
+ "timings": {
+  "ingest": 1.4,
+  "recon": 6.13,
+  "align": 0.11,
+  "rooms": 1.05,
+  "ceiling": 0.02,
+  "openings": 1.7,
+  "openings_debug": 0.63,
+  "drift_metrics": 0.23,
+  "damage": 0.84,
+  "total": 12.92
+ },
+ "warnings": [
+  {
+   "stage": "recon",
+   "message": "Chunk 4 (19-27 s) disagrees with the previous chunk by 0.28 m on the frames they share: the model's camera poses are inconsistent there (fast motion or close-ups), so walls seen in that stretch may be doubled or misplaced."
+  },
+  {
+   "stage": "recon",
+   "message": "Chunk 5 (25-33 s) disagrees with the previous chunk by 0.39 m on the frames they share: the model's camera poses are inconsistent there (fast motion or close-ups), so walls seen in that stretch may be doubled or misplaced."
+  },
+  {
+   "stage": "recon",
+   "message": "Chunk 6 (29-37 s) disagrees with the previous chunk by 0.88 m on the frames they share: the model's camera poses are inconsistent there (fast motion or close-ups), so walls seen in that stretch may be doubled or misplaced."
+  },
+  {
+   "stage": "rooms",
+   "message": "R2 is partially observed: the camera spent 0.0 s inside it (< 3 s), so it was seen mostly through a doorway; its walls and area are partial."
+  },
+  {
+   "stage": "ceiling",
+   "message": "R1: ceiling not observed: no down-facing layer of at least 1 m\u00b2 2.1\u20133.6 m above the floor inside R1; highest down-facing point 1.90 m"
+  },
+  {
+   "stage": "ceiling",
+   "message": "R2: ceiling not observed: no down-facing layer of at least 1 m\u00b2 2.1\u20133.6 m above the floor inside R2; highest down-facing point 1.37 m"
+  },
+  {
+   "stage": "damage",
+   "message": "1 detection(s) not confirmed from a second viewpoint, so not reported as damage: water_stain on R2.floor (0.42, damage/unconfirmed_1.jpg). Reflections, shadows and tile edges look like this."
+  }
+ ]
+}
