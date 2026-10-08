@@ -11,8 +11,8 @@ path exists. Benchmark numbers are from the fix-after run (`make benchmark`, [ev
 **Three facts behind most Partial / Not done rows.**
 (1) The author has no iPhone. The recruiter said to run the LiDAR tier on her sample data (`data/stray/`, 3 Stray
 Scanner captures) and capture photo and video on the author's own phone.
-(2) Those own captures (`data/own/`: photos, video, tape, app export, staged damage) **do not exist yet** (8 Oct). Every row
-that needs them is open, and the slot is ready: the harness picks them up with `make benchmark`.
+(2) Those own captures (`data/own/`: photos, video, tape, app export, staged damage) **were not taken** (no time before the
+deadline). Every row that needs them is Not done or Partial. The harness is ready for them: `make benchmark` picks up `data/own/`.
 (3) There is no tape on the sample data. LiDAR is scored by repeatability, camera tiers against the LiDAR plan of the same
 capture (a reference, not truth), and openings by eye.
 
@@ -55,12 +55,12 @@ capture (a reference, not truth), and openings by eye.
 
 | req # | requirement | path | artifact | status |
 |---|---|---|---|---|
-| 52 | Build the benchmark set yourself | `eval/run_benchmark.py`, `eval/ground_truth/TEMPLATE.yaml` | Harness ready; own set pending | Partial: sample data only (fact 2) |
+| 52 | Build the benchmark set yourself | `eval/run_benchmark.py`, `eval/ground_truth/TEMPLATE.yaml` | Harness ready; own set not taken | Partial: sample data only (fact 2) |
 | 53, 54 | Multi-room capture, 3+ rooms + connector | `eval/BENCHMARK.md` | c7d28f72c6 / 1a8384c3f6: whole flat, corridor + rooms (evaluator's data, not ours) | Partial: own multi-room capture not made |
-| 55, 56 | Furnished room, staged damage, 2 classes | `scripts/exp06_damage.py`, `docs/STATUS.md` (06) | Painted test on real frames (stain found, crack missed) | Not done: own staged capture pending |
+| 55, 56 | Furnished room, staged damage, 2 classes | `scripts/exp06_damage.py`, `docs/STATUS.md` (06) | Painted test on real frames (stain found, crack missed) | Not done: own staged capture not taken |
 | 57, 58, 59 | Same rooms at all three tiers, multi-room included, photos as room folders | `scripts/make_camera_tiers.py`, `eval/BENCHMARK.md` | Video and photo-folder inputs cut from the same Stray captures | Partial: derived from the sample data, not captured on a phone |
-| 60 | One room captured twice, same tier | `eval/repeatability_lidar.md` | LiDAR: the two whole-flat scans | Partial: camera-tier repeats pending own capture |
-| 61, 63 | Laser or tape ground truth on everything, submitted | `eval/ground_truth/TEMPLATE.yaml`, `eval/match_gt.py` | Format, matcher and scorer ready | Not done: no tape on the sample data; own tape pending |
+| 60 | One room captured twice, same tier | `eval/repeatability_lidar.md` | LiDAR: the two whole-flat scans | Partial: camera-tier repeats not done (own captures not taken) |
+| 61, 63 | Laser or tape ground truth on everything, submitted | `eval/ground_truth/TEMPLATE.yaml`, `eval/match_gt.py` | Format, matcher and scorer ready | Not done: no tape on the sample data; own tape not taken |
 | 62 | Raw sensor data submitted | `scripts/fetch_data.sh` | Unpacks the evaluator's sample zips from `data/zips/`; tries a Hugging Face dataset first and falls back to the local zips | Not done: dataset not published, time. The evaluator's own sample zips are the raw data (README: put them in `data/zips/`) |
 
 ## Part 2: gates
@@ -83,8 +83,8 @@ capture (a reference, not truth), and openings by eye.
 
 | req # | requirement | path | artifact | status |
 |---|---|---|---|---|
-| 88, 89, 90, 94, 95 | LiDAR tier vs a consumer app on 2 rooms; one table; beat or tie ≥ 70 % | `eval/HEAD_TO_HEAD.md` | Protocol and empty table; substitute (photo/video vs magicplan) ready | Not done: no LiDAR iPhone (recruiter-approved); substitute pending own capture |
-| 91, 92, 93 | Name the app and version, submit its export | `eval/HEAD_TO_HEAD.md` | magicplan free tier; export goes to `data/own/app_export/` | Not done: pending own capture |
+| 88, 89, 90, 94, 95 | LiDAR tier vs a consumer app on 2 rooms; one table; beat or tie ≥ 70 % | `eval/HEAD_TO_HEAD.md` | Protocol and empty table; substitute (photo/video vs magicplan) ready | Not done: no LiDAR iPhone (recruiter-approved); substitute not run (own captures not taken) |
+| 91, 92, 93 | Name the app and version, submit its export | `eval/HEAD_TO_HEAD.md` | magicplan free tier; export goes to `data/own/app_export/` | Not done: own captures not taken |
 | 96 | Cost is no excuse | `eval/HEAD_TO_HEAD.md` | Free tier chosen | Done |
 
 ## Part 4: fix loop
@@ -114,14 +114,14 @@ capture (a reference, not truth), and openings by eye.
 | 123, 124 | README to running in < 15 min on a clean machine | `README.md`, `scripts/fetch_data.sh`, `scripts/fetch_weights.sh` | `uv sync` → zips into `data/zips/` → fetch → `fp run` | Done: fresh clone to the first plan in 2 min 10 s, warm uv/HF caches ([docs/COLD_RUN.md](docs/COLD_RUN.md)); a truly cold machine adds the uv and weight downloads |
 | 126, 127, 128 | Reproduction bundle: every number from raw inputs; cache deterministic; live path runs | `Makefile` (`benchmark`), `eval/run_benchmark.py`, `fp/recon/camera.py`, `scripts/cache_sync.py` | `make benchmark` regenerates every table; MapAnything cache keyed by input bytes; live replay byte-identical outside timings | Partial: raw data and cache not published (not done: dataset not published, time); without the cache every camera-tier run is live |
 | 129 | Benchmark: gates at all three tiers | `eval/BENCHMARK.md` | 27 gate rows, PASS 3 / FAIL 13 / NOT SCORED 10 / NOT DONE 1 | Done (as measured) |
-| 130 | Repeatability table | `eval/BENCHMARK.md`, `eval/repeatability_lidar.md` | LiDAR pair table; own repeats pending | Partial |
+| 130 | Repeatability table | `eval/BENCHMARK.md`, `eval/repeatability_lidar.md` | LiDAR pair table; own repeats not taken | Partial |
 | 131 | Head-to-head table | `eval/HEAD_TO_HEAD.md` | Empty table and protocol | Not done (see Part 3) |
 | 132 | Timing | `eval/BENCHMARK.md` | Per-stage timings per capture | Done |
 | 133 | Fix loop bundle | `fixloop/FIX_DECLARATION.md`, `fixloop/RESULT.md`, `fixloop/before/BENCHMARK.md`, `fixloop/after/BENCHMARK.md` | Declaration, result, both runs, diff | Done |
 | 134–141 | Technical report ≤ 6 pages: architecture, tiers + device matrix, drift, error budget, calibration, fix loop, failure modes | `docs/REPORT.md`, `docs/REPORT.pdf`, `docs/img/architecture.svg` | Every section, PDF export ≤ 6 pages (`scripts/export_report.py`) | Done |
-| 142 | Raw data: sensor logs | `scripts/fetch_data.sh` | Stray Scanner sample captures (evaluator's zips); derived camera inputs rebuilt by `scripts/make_camera_tiers.py` | Not done: dataset not published, time; own sensor logs pending |
+| 142 | Raw data: sensor logs | `scripts/fetch_data.sh` | Stray Scanner sample captures (evaluator's zips); derived camera inputs rebuilt by `scripts/make_camera_tiers.py` | Not done: dataset not published, time; own captures not taken |
 | 143 | Raw data: ground truth | `eval/ground_truth/c7d28f72c6.openings_by_eye.yaml` | By-eye opening labels | Not done: no tape exists yet |
-| 144 | Raw data: app exports | `eval/HEAD_TO_HEAD.md` | Slot: `data/own/app_export/` | Not done: pending own capture |
+| 144 | Raw data: app exports | `eval/HEAD_TO_HEAD.md` | Slot: `data/own/app_export/` | Not done: own captures not taken |
 
 ## Walk-in test
 

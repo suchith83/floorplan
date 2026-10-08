@@ -20,7 +20,7 @@ How to capture: [CAPTURE_PROTOCOL.md](../CAPTURE_PROTOCOL.md).
 | iPhone 17, iPhone Air | not available: no LiDAR sensor | runs; not tested on this phone | runs; not tested on this phone |
 | iPhone 17 Pro / Pro Max | runs; not tested on this phone | runs; not tested on this phone | runs; not tested on this phone |
 | iPad Pro with LiDAR | expected to run (same Stray Scanner format); not tested | expected to run; not tested | expected to run; not tested |
-| Android phone | not available: Stray Scanner is iOS only | expected to run; not tested | expected to run; not tested; pending own capture |
+| Android phone | not available: Stray Scanner is iOS only | expected to run; not tested | expected to run; not tested |
 | **What was actually tested** | 3 Stray Scanner exports from the evaluator, from one Pro-class iPhone of unknown model (the files carry no device name: only intrinsics, fx ≈ 1,600 px at 1920×1440) | the `rgb.mp4` of 2 of those exports, with the rotation tag an iPhone writes added (D05.7) | 7 stills (1 room) and 17 stills (3 rooms) cut from 2 of those exports, in room folders, with EXIF focal length added (D05.7, D05.8) |
 
 "Runs" means the input format is one our reader handles (Stray Scanner folder; `.mov`/`.mp4` HEVC or H.264, HDR or
@@ -33,7 +33,7 @@ pillow-heif, EXIF rotation, Display P3 converted to sRGB, focal length from EXIF
 through the same tone-map path; untested on a real file. Photos without EXIF focal length still run, with the focal
 length estimated and a warning.
 
-**Own capture.** The photo and video tiers will be captured on the user's own phone (not an iPhone). Pending.
+**Own capture.** The plan was to capture the photo and video tiers on my own phone (not an iPhone); those captures were not taken before the deadline.
 
 ## Accuracy we measured
 

@@ -9,6 +9,18 @@ scope. Every number comes with a 90 % interval. One command per capture; everyth
 - Technical report: [docs/REPORT.md](docs/REPORT.md). Requirement by requirement: [COMPLIANCE.md](COMPLIANCE.md)
 - Measured accuracy: [eval/BENCHMARK.md](eval/BENCHMARK.md)
 
+![Stitched floor plan, LiDAR tier, sample capture c7d28f72c6](fixloop/after/c7d28f72c6/plan.svg)
+
+*The LiDAR tier on the evaluator's whole-flat sample capture `c7d28f72c6`: 9 rooms placed and connected, walls, areas,
+ceiling heights (h) and doors, each as value ± its 90 % interval; D1 marks a damage detection. Labels crowd in the small
+rooms (a known rendering issue). `report.html` adds the tables, warnings, damage crops and scope.*
+
+**Where it stands (8 Oct).** All three tiers run end to end with the same schema. Of 27 benchmark gates: 3 pass, 13 fail,
+10 can't be scored without tape, 1 not done ([eval/BENCHMARK.md](eval/BENCHMARK.md)). The LiDAR tier was run on the
+evaluator's sample data; my own photo/video captures with tape ground truth were not taken, so the rows that need them are
+marked Not done in [COMPLIANCE.md](COMPLIANCE.md). The camera tiers are far from the LiDAR reference (median wall error
+37–39 %), and their intervals are wide to say so.
+
 ## Prerequisites
 
 - macOS or Linux, 16 GB RAM (the video tier peaked at 14.3 GB), about 15 GB free disk

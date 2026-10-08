@@ -5,7 +5,7 @@
 | comparison | status | reason |
 |---|---|---|
 | Brief's version: our **LiDAR tier** vs a consumer app on 2 of our own benchmark rooms | **Not done (no iPhone Pro; recruiter-approved)** | The user has no LiDAR iPhone. The recruiter said to skip own LiDAR captures and run the LiDAR tier on her sample data, which has no app export and no tape. |
-| Substitute: our **photo / video tier** vs magicplan (free tier) on the same 2 rooms, both against tape | **Pending own capture** | Needs `data/own/` (captures, tape, app export). None of it exists yet (8 Oct). |
+| Substitute: our **photo / video tier** vs magicplan (free tier) on the same 2 rooms, both against tape | **Not done: own captures not taken** | Needs `data/own/` (captures, tape, app export). None of it exists yet (8 Oct). |
 
 The substitute is not what the brief asks for: it compares our weakest tiers with an app on a phone without LiDAR.
 It is labelled as a substitute everywhere it appears, and the compliance matrix keeps the LiDAR row as Not done.
@@ -24,7 +24,7 @@ It is labelled as a substitute everywhere it appears, and the compliance matrix 
 
 | room | dimension | tape | magicplan | |err| app | ours (tier) | |err| ours | beat or tie? |
 |---|---|---|---|---|---|---|---|
-| _pending own capture_ | | | | | | | |
+| _not done: own captures not taken_ | | | | | | | |
 
 5. **Beat or tie** = our |error| ≤ the app's |error| + 0.5 cm (a tape reading's own resolution). Target: ≥ 70 % of
    shared dimensions. Reported as measured, including if we lose.
