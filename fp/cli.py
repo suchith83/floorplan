@@ -160,7 +160,14 @@ def _geometry(capture, out, plan, timings, tier, backend, filter_frames, max_fra
         rays = _plan_rays(rec, T)
         traj = bundle.meta.get("_trajectory")
         cams = to_plan(T, traj[1]) if traj is not None else None
-        rooms, conns, gdbg = extract_rooms(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays, cams)
+        rooms, conns, gdbg = extract_rooms(P, N, al["ceiling_h"], rec.meta.get("voxel", 0.02), 1.0, rays, cams,
+                                           predicted_depth=tier != "lidar")
+        if gdbg.get("phantom_m2"):
+            warn("rooms", f"Ignored {gdbg['phantom_m2']:.1f} m2 of wall surface that other frames saw through: copies of "
+                          "walls from a misregistered part of the capture (camera tiers have no drift correction).")
+        if gdbg.get("unroomed_m2", 0) >= 1.0:
+            warn("rooms", f"{gdbg['unroomed_m2']:.1f} m2 of seen floor is in no room: slivers between walls too narrow "
+                          "to seed a room; the floor area leaves them out.")
         wall_lines = gdbg["lines"]
         _labels_png(out / "debug" / "rooms_split.png", gdbg)
         if not rooms:
@@ -383,7 +390,7 @@ def check_overlaps(rooms) -> list[tuple[str, str, float]]:
 
 def _labels_png(path, gdbg):
     """debug/rooms_split.png: the footprint (grey) split into rooms (one colour each), tall walls black, closed
-    doorways red; +x right, +y up."""
+    doorways red, seen-through "walls" left in the floor orange; +x right, +y up."""
     import cv2
     lab = gdbg["labels"]
     pal = np.array([[255, 255, 255]] + [[int(v) for v in np.random.default_rng(k).integers(60, 230, 3)]
@@ -393,6 +400,8 @@ def _labels_png(path, gdbg):
     if "tall" in gdbg:
         img[gdbg["tall"]] = 0                 # tall wall evidence (black)
         img[gdbg["bar"]] = (0, 0, 255)        # doorways closed along wall lines (red)
+    if gdbg.get("phantom") is not None:
+        img[gdbg["phantom"]] = (0, 165, 255)  # tall surface other frames saw through, not cut (orange, camera tiers)
     cv2.imwrite(str(path), np.ascontiguousarray(img.transpose(1, 0, 2)[::-1]))
 
 

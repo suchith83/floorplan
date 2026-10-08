@@ -68,17 +68,28 @@ MIN_RAY_HITS = 3   # a cell is seen-through free space if rays from >= 3 frames 
                    # e.g. a mirror reflection, must not open a hole through a wall)
 
 
-def _seen_through(rays, o, shape):
+RAY_STOP_SHORT = 0.10  # m: a ray tested against a wall stops this short of its own point, so the wall it measured
+                       # isn't counted as seen through; predicted walls are 5-10 cm thick (the 5-20 cm range keeps the
+                       # same floor on c7d28f72c6-video, fixloop/FIX_DECLARATION.md)
+
+
+def _seen_through(rays, o, shape, stop_short: float = 0.0):
     """rays: list of (camera xyz, (n,3) measured points) per frame, plan coords. Returns, per RES cell, the
-    number of frames whose top-down rays crossed it."""
+    number of frames whose top-down rays crossed it (each ray cut `stop_short` m before its point)."""
     cnt = np.zeros(shape, np.uint16)
     frame = np.zeros(shape[::-1], np.uint8)          # cv2 draws in (row=j, col=i) order
     for cam, ends in rays:
         if not len(ends):
             continue
+        ends = ends[:, :2]
+        if stop_short:
+            v = ends - cam[None, :2]
+            L = np.linalg.norm(v, axis=1)
+            k = L > stop_short + RES
+            ends = cam[None, :2] + v[k] * ((L[k] - stop_short) / L[k])[:, None]
         frame[:] = 0
         c = tuple(((cam[:2] - o) / RES).astype(int))
-        for e in ((ends[:, :2] - o) / RES).astype(int):
+        for e in ((ends - o) / RES).astype(int):
             cv2.line(frame, c, (int(e[0]), int(e[1])), 1, 1)
         cnt += frame.T
     return cnt
@@ -222,6 +233,15 @@ def tall_wall_mask(P, N, o, shape):
     return nb >= TALL_MIN_BANDS
 
 
+def seen_through_walls(tall, rays, o):
+    """Tall cells that rays from >= MIN_RAY_HITS frames passed through (each ray stopped RAY_STOP_SHORT before its
+    point): a wall blocks the sight lines through it, so these are copies of walls from a misregistered part of a
+    camera-tier capture (no drift correction there), standing in air the other frames looked through. Not used on
+    LiDAR: its walls are drift-corrected, and in thousands of frames rays grazing along a real wall cross its cells
+    (42-75 % of c7d28f72c6's real wall cells would go, fixloop/FIX_DECLARATION.md)."""
+    return tall & (_seen_through(rays, o, tall.shape, RAY_STOP_SHORT) >= MIN_RAY_HITS)
+
+
 def close_doorways(tall, lines, o):
     """Along every wall line, a 0.5-1.3 m gap between two runs of tall wall is a doorway: bar it (3 cells
     thick) so the rooms on either side become separate regions, and remember it as a door between them.
@@ -270,19 +290,25 @@ def _gap_doors(gaps, lab, o):
     return out
 
 
-def extract_rooms(P, N, ceiling_h, voxel, source_prior, rays=None, cams=None):
+def extract_rooms(P, N, ceiling_h, voxel, source_prior, rays=None, cams=None, predicted_depth: bool = False):
     """The whole floor: footprint minus tall walls, doorways closed along wall lines, split into rooms
     (fp/geometry/rooms.py watershed for the open necks that remain), one rectilinear polygon per room on the
     wall lines, overlaps repaired, and the connections between rooms (doors and shared walls).
+    predicted_depth (video/photo tiers): tall cells that other frames saw through are dropped first (seen_through_walls).
     Returns (rooms, connections, debug)."""
     from fp.geometry.rooms import doors, split_rooms
     lines = _wall_lines(P, N, ceiling_h, voxel)
     fp, o = _footprint(P, N, ceiling_h, rays, cams)
     tall = tall_wall_mask(P, N, o, fp.shape)
+    phantom = np.zeros(fp.shape, bool)
+    if predicted_depth and rays is not None and len(rays):
+        phantom = seen_through_walls(tall, rays, o)
+        tall &= ~phantom
     bar, gaps = close_doorways(tall, lines, o)
     free = fp & ~ndimage.binary_dilation(tall) & ~bar
     free = ndimage.binary_opening(free, iterations=2)       # drop 1-2 cell slivers left along the walls
     lab = split_rooms(free, RES)
+    unroomed = float((free & (lab == 0)).sum() * RES * RES)   # free floor with no room seed: left out, so say so
     floor = _surface_cells(P, N, ceiling_h, o, fp.shape)
     inside_cam = np.zeros(fp.shape, bool)
     if cams is not None and len(cams):
@@ -316,7 +342,8 @@ def extract_rooms(P, N, ceiling_h, voxel, source_prior, rays=None, cams=None):
     conns = [c for c in doors(lab, o, RES) + _gap_doors(gaps, lab, o) if set(c["rooms"]) <= kept]
     conns = _dedupe(conns) + _wall_adjacency(out, conns)
     return out, conns, {"lines": lines, "footprint": fp, "labels": lab, "origin": o, "tall": tall, "bar": bar,
-                        "gaps": gaps, "dropped": dropped, "overlaps": overlaps}
+                        "gaps": gaps, "dropped": dropped, "overlaps": overlaps, "phantom": phantom,
+                        "phantom_m2": round(float(phantom.sum() * RES * RES), 2), "unroomed_m2": round(unroomed, 2)}
 
 
 def polygon_width(poly, tol=0.01) -> float:
