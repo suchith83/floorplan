@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 340" width="640" height="340" font-family="Helvetica, Arial, sans-serif" font-size="13">
+  <title>Walk path: hallway, three rooms, a pause in every doorway, end where you started</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#d55e00"/>
+    </marker>
+    <symbol id="cam" viewBox="-10 -8 20 16" overflow="visible">
+      <rect x="-9" y="-6" width="18" height="12" rx="2" fill="#333"/>
+      <rect x="-4" y="-9" width="8" height="4" fill="#333"/>
+      <circle r="3.5" fill="#fff"/>
+    </symbol>
+  </defs>
+  <rect width="640" height="340" fill="#fff"/>
+
+  <!-- walls (black), doorways are gaps -->
+  <g stroke="#000" stroke-width="5" fill="none" stroke-linecap="square">
+    <path d="M20,200 L20,20 L620,20 L620,260 L20,260 L20,240"/>
+    <path d="M220,20 L220,180 M420,20 L420,180"/>
+    <path d="M20,180 L100,180 M140,180 L300,180 M340,180 L500,180 M540,180 L620,180"/>
+  </g>
+
+  <!-- room names -->
+  <g fill="#555" font-size="15" text-anchor="middle">
+    <text x="122" y="105">Living</text>
+    <text x="322" y="72">Kitchen</text>
+    <text x="522" y="105">Bedroom</text>
+    <text x="440" y="207">Hallway</text>
+  </g>
+
+  <!-- the walk (one path, back to the start) -->
+  <polyline fill="none" stroke="#d55e00" stroke-width="2.5" stroke-dasharray="6 4" marker-mid="url(#arrow)"
+    points="48,222 80,222 112,222 112,150 55,150 55,100 55,50 120,50 190,50 190,100 190,150 128,150 128,222
+            220,222 312,222 312,150 255,150 255,100 255,50 320,50 390,50 390,100 390,150 328,150 328,222
+            420,222 512,222 512,150 455,150 455,100 455,50 520,50 590,50 590,100 590,150 528,150 528,240
+            400,240 250,240 48,240"/>
+
+  <!-- pause 2 s in every doorway -->
+  <g fill="#d55e00">
+    <circle cx="120" cy="180" r="7"/><circle cx="320" cy="180" r="7"/><circle cx="520" cy="180" r="7"/>
+  </g>
+  <g fill="#000" font-size="12" font-weight="bold">
+    <text x="145" y="196">2 s</text><text x="345" y="196">2 s</text><text x="545" y="196">2 s</text>
+  </g>
+
+  <!-- start = end -->
+  <rect x="30" y="221" width="20" height="20" fill="#000"/>
+  <text x="28" y="280" font-weight="bold">START = END</text>
+
+  <!-- photo tier: two sweep spots in a room, one doorway photo -->
+  <use href="#cam" x="270" y="92" width="20" height="16"/>
+  <use href="#cam" x="355" y="92" width="20" height="16"/>
+  <g fill="none" stroke="#777" stroke-width="1.5">
+    <path d="M272,85 A16,16 0 0 1 288,85"/><path d="M357,85 A16,16 0 0 1 373,85"/>
+  </g>
+  <g fill="#333" font-size="11" text-anchor="middle">
+    <text x="280" y="125">spot 1</text><text x="365" y="125">spot 2</text>
+  </g>
+
+  <!-- legend -->
+  <g font-size="12" fill="#000">
+    <line x1="150" y1="282" x2="190" y2="282" stroke="#d55e00" stroke-width="2.5" stroke-dasharray="6 4"/>
+    <text x="198" y="286">walk, 0.5 m per second (video and LiDAR)</text>
+    <circle cx="170" cy="304" r="6" fill="#d55e00"/>
+    <text x="198" y="308">stand still 2 s in every doorway</text>
+    <use href="#cam" x="160" y="318" width="20" height="16"/>
+    <text x="198" y="330">photos: 2 spots per room, turn so each photo overlaps half the last</text>
+  </g>
+</svg>
