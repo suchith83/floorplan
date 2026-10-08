@@ -114,6 +114,26 @@ def test_a_doorway_photo_in_two_rooms_is_one_frame_in_both(tmp_path):
     assert not b.meta["_warnings"][:-1]                             # only the no-EXIF-focal summary
 
 
+def test_a_doorway_photo_exported_twice_with_different_bytes_is_one_frame(tmp_path):
+    """AirDrop or Photos can re-encode a photo on each export; the EXIF capture stamp still identifies it."""
+    def shot(path, seed, quality, stamp):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        im = Image.fromarray(_gradient(320, 240, seed))
+        ex = im.getexif()
+        ex[0x0110] = "iPhone 15"
+        ex.get_ifd(0x8769).update({0x9003: "2026:10:08 09:00:00", 0x9291: stamp})
+        im.save(path, quality=quality, exif=ex.tobytes())
+    cap = tmp_path / "cap"
+    shot(cap / "kitchen" / "k1.jpg", 1, 90, "101")
+    shot(cap / "kitchen" / "door.jpg", 9, 90, "555")
+    shot(cap / "hall" / "h1.jpg", 2, 90, "202")
+    shot(cap / "hall" / "door_again.jpg", 9, 70, "555")          # same shot, different bytes
+    assert (cap / "kitchen" / "door.jpg").read_bytes() != (cap / "hall" / "door_again.jpg").read_bytes()
+    b = photos.load(cap, cache_dir=tmp_path / "c")
+    assert len(b.frames) == 3 and b.meta["_frame_room_sets"].count(["hall", "kitchen"]) == 1
+    assert all(len(s) == 40 for s in b.meta["_source_ids"])      # recon cache still keyed by content
+
+
 def test_reruns_reuse_the_cache_byte_for_byte_and_respect_cache_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     cap = tmp_path / "cap"

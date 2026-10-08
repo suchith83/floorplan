@@ -1,6 +1,7 @@
 """Folder of room folders of photos -> frames. The capture protocol is one folder per room
 (photos/kitchen/IMG_0001.HEIC); the folder name labels the plan's rooms, and a doorway photo saved in
-both rooms' folders (identical bytes) becomes ONE frame that belongs to both, which is what ties the
+both rooms' folders (identical bytes, or the same EXIF capture time to the subsecond when an export
+re-encoded one copy) becomes ONE frame that belongs to both, which is what ties the
 rooms together. HEIC/JPEG/PNG are decoded upright and in sRGB; EXIF focal length gives an intrinsics
 prior. Near-duplicates (same room, almost the same image) are dropped.
 
@@ -24,6 +25,7 @@ SAVE_SIDE = 1600       # longest side of the cached JPEG: enough for the recon m
 JPEG_QUALITY = 95
 DUPLICATE_DIFF = 1.5   # mean grey difference (0-255) to the previous photo of the room: below it, a double tap
 PHOTOS_FROM_VIDEO = 24  # stills taken from a LiDAR capture's rgb.mp4 to run the photo tier on the same rooms
+DATETIME_ORIGINAL, SUBSEC_ORIGINAL, MODEL = 0x9003, 0x9291, 0x0110   # EXIF tags for the shot's identity
 CACHE_VERSION = 1       # bump when the decode recipe changes
 
 
@@ -54,14 +56,15 @@ def load(path: Path, max_frames: int = MAX_PHOTOS, cache_dir: Path | None = None
     path = Path(path)
     rooms = list_photos(path)
     warnings: list[str] = []
-    # identical bytes in several room folders = one photo shared by those rooms
-    photos: dict[str, dict] = {}   # sha1 -> {"rooms": set, "first": (room, name), "jpg", "K"}
+    # the same photo in several room folders = one photo shared by those rooms
+    photos: dict[str, dict] = {}   # identity -> {"rooms": set, "first": (room, name), "sha", "jpg", "K"}
     unreadable, no_focal = [], 0
     for room in sorted(rooms):
         for p in sorted(rooms[room], key=lambda q: str(q.relative_to(path / room))):
             sha = media.sha1_file(p)
-            if sha in photos:
-                photos[sha]["rooms"].add(room)
+            key = _capture_time(p) or sha
+            if key in photos:
+                photos[key]["rooms"].add(room)
                 continue
             try:
                 jpg, K = _cached_jpeg(p, sha, cache_dir)
@@ -69,7 +72,8 @@ def load(path: Path, max_frames: int = MAX_PHOTOS, cache_dir: Path | None = None
                 unreadable.append(f"{p.relative_to(path)} ({type(e).__name__})")
                 continue
             no_focal += K is None
-            photos[sha] = {"rooms": {room}, "first": (room, str(p.relative_to(path / room))), "jpg": jpg, "K": K}
+            photos[key] = {"rooms": {room}, "first": (room, str(p.relative_to(path / room))), "sha": sha,
+                           "jpg": jpg, "K": K}
     if unreadable:
         warnings.append(f"Skipped {len(unreadable)} unreadable photo(s): {', '.join(unreadable[:5])}"
                         + (" ..." if len(unreadable) > 5 else ""))
@@ -104,9 +108,25 @@ def load(path: Path, max_frames: int = MAX_PHOTOS, cache_dir: Path | None = None
         "dropped_duplicate": int((~keep).sum()), "shared_photos": int(shared[idx].sum()),
         "_frame_rooms": [photos[s]["first"][0] for s in used],
         "_frame_room_sets": [sorted(photos[s]["rooms"]) for s in used],
-        "_source_ids": used,
+        "_source_ids": [photos[s]["sha"] for s in used],   # content ids: the recon cache key
         "_K_prior": [None if photos[s]["K"] is None else np.asarray(photos[s]["K"]).tolist() for s in used],
         "_warnings": warnings})
+
+
+def _capture_time(p: Path) -> str | None:
+    """EXIF DateTimeOriginal + SubSecTimeOriginal (+ camera model), or None. A phone stamps every shot to the
+    millisecond, so two files with the same stamp are one photo exported twice (AirDrop or Photos may re-encode
+    it, so the bytes can differ). Files without a subsecond stamp fall back to identical bytes."""
+    try:
+        media._register_heif()
+        from PIL import Image
+        with Image.open(p) as im:
+            ex = im.getexif()
+            ifd = ex.get_ifd(media.EXIF_IFD)
+            dt, sub = ifd.get(DATETIME_ORIGINAL), ifd.get(SUBSEC_ORIGINAL)
+            return f"exif:{dt}.{sub}:{ex.get(MODEL, '')}" if dt and sub else None
+    except Exception:  # noqa: BLE001 - unreadable EXIF just means "match by bytes"
+        return None
 
 
 def _cached_jpeg(p: Path, sha: str, cache_dir: Path | None) -> tuple[Path, list | None]:
