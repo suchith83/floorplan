@@ -463,3 +463,38 @@ numbered D05.x so the merge doesn't clash. -->
   insensitive from 5 to 20 cm). A warning now names any floor still left in no room.
 - **Evidence.** `fixloop/FIX_DECLARATION.md` (committed before the fix) and `fixloop/RESULT.md`. The orange cells in
   `out/c7d28f72c6-video/debug/rooms_split.png` are the ignored phantom walls.
+
+## D08.1. Raw data and model cache published as a Hugging Face dataset, fetched by script
+- **Context.** The brief wants raw benchmark data submitted and large binaries fetched by script. The sample captures are 833 MB
+  of zips, the derived camera inputs 290 MB, the MapAnything output cache 271 MB. None of it may enter git (5 MB file cap).
+- **Options.** (a) GitHub release assets (2 GB per file, but no partial download and no per-file integrity list); (b) a Hugging
+  Face dataset (git-LFS backed, `snapshot_download` with patterns, private until approved, the same library the pipeline already
+  uses for weights); (c) a cloud bucket (our infrastructure, which the brief rules out for the live path).
+- **Choice.** (b). `scripts/fetch_data.sh` downloads only what is missing (zips, `derived/`, `own/`, `cache/`), unzips the Stray
+  captures and drops any recon cache entry whose sha256 doesn't match the manifest. `scripts/fetch_weights.sh` pre-downloads the
+  three public model repos. The upload stays a manual step by the author (login + approval); the dataset is created private.
+- **Evidence.** `fetch_data.sh` against a missing repo fails with "Repository Not Found" and changes nothing; with all data present it
+  skips the download.
+
+## D08.2. Photo protocol: an album per room, one doorway photo added to both albums, at most 8 per album
+- **Context.** The brief: 2–8 stills per room, one folder per room, and the photo folders must stitch. 05 showed photos must overlap
+  (D05.8) and that a photo shared by two folders is what links rooms. The literal reader found the first draft ambiguous: where a
+  doorway photo goes, how to mark it for copying later, what an open-plan space is, and photo counts above 8; the second
+  round found a hallway can't meet both "at most 8" and "never skip a doorway", and that `my_home` had to sit inside `floorplan`.
+- **Options.** (a) copy doorway photos between folders on the laptop (needs the user to remember which IMG_xxxx was a doorway
+  photo); (b) add the doorway photo to both albums on the phone and export each album (may re-encode, so bytes differ);
+  (c) (b) plus matching the same shot by EXIF capture time.
+- **Choice.** (c). `fp/ingest/photos.py` links two files as one photo when bytes match or when EXIF DateTimeOriginal +
+  SubSecTimeOriginal + Model match (iPhones stamp to the millisecond). Recon cache keys stay the sha1, so cached outputs are
+  untouched. The protocol asks for 6 corner photos per room plus its doorway photos (2 per corner with 3+ doorways), and says never
+  to skip a doorway photo even if an album passes 8 (a many-door hallway); the code has no per-room cap. The run step is
+  "drag the capture into Terminal", so the folder can live anywhere.
+  Open plan = two albums with the boundary treated as a doorway.
+- **Evidence.** `tests/test_camera_ingest.py::test_a_doorway_photo_exported_twice_with_different_bytes_is_one_frame`; derived
+  benchmark photos load identically (7 and 17 frames, same room sets, same hash before and after).
+
+## D08.3. Compliance matrix built from an independently extracted requirement list
+- **Context.** Compliance is 10 % of the score and the matrix must not drop requirements the author forgot.
+- **Choice.** A subagent that read only the brief split it into 157 atomic requirements (`docs/brief/requirements.md`). Each matrix row
+  lists the requirement numbers it covers; `scripts/check_compliance.py` fails if a number is uncovered or a path doesn't exist.
+- **Evidence.** 157/157 covered, 147 paths checked, all exist.

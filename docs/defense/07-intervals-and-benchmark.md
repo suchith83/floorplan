@@ -3,6 +3,8 @@
 **The numbers to remember:** LiDAR wall intervals were fitted at **k = 1.42** on 16 wall-to-wall spans from the two scans of
 the same flat; held-out coverage only **81 %** (fails a strict 90 %). The worst gate is **video wall lengths on c7d2: p90 error 105 % vs 3 %**.
 `make benchmark` regenerates everything in **500 s**. Gates: 2 pass, 14 fail, 10 can't be scored without tape.
+*(These are the numbers at the end of 07. After the fix loop (09): worst gate p90 76 %, PASS 3 / FAIL 13, and video held-out
+coverage 92 %, because the refit widened the video intervals (b 2.41 → 4.09), not because accuracy improved; `eval/BENCHMARK.md`.)*
 
 **1. What does your 90 % interval mean?**
 It's a claim about frequency: across many measurements like this one, at least 9 in 10 true values fall inside

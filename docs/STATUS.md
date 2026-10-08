@@ -349,7 +349,36 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   `../out_pre07/` (outside the repo).
 - **Next:** `Execute prompts/09-fix-loop.md` on the worst gate above. Own captures, when they exist: `data/own/` +
   `eval/ground_truth/own.yaml` (from TEMPLATE.yaml; A0, converting `ground_truth_raw.txt`, is still to do), then `make benchmark`.
-## 08 — Capture protocol, device matrix, README, report, compliance matrix: not started
+## 08 — Capture protocol, device matrix, README, report, compliance matrix: **done; data not yet published (needs the author)**
+- **`CAPTURE_PROTOCOL.md`** (+ `CAPTURE_PROTOCOL.pdf`, **1 A4 page**, figure `docs/img/walk_path.svg`): shared walk (0.5 m/s, loop 1 m in
+  from the walls, 2 s in a doorway each time you pass, one recording < 4 min), then LiDAR (Stray Scanner, Files → Compress → AirDrop,
+  run the unzipped folder), video (Camera app, sideways), photos (album per room, one word; 2 corners × 3 overlapping photos; one
+  doorway photo added to **both** albums; open plan = two albums; never skip a doorway photo). Run = drag the capture into Terminal
+  after `uv run fp run `.
+- **Literal reader** (subagent, 3 role-plays: LiDAR on a 15 Pro, video on a 16, photos in a flat with a hallway, a 3-door room and
+  open plan): round 1 found 7 blocking (5 protocol, 2 outside it: repo not pushed, dataset private), round 2 found 2 more (hallway
+  can't meet "≤ 8" and "never skip a doorway"; `my_home` had to sit inside `floorplan`). All fixed; a third round was not run.
+  One fix is code: **`fp/ingest/photos.py` links a doorway photo by EXIF capture time + subsecond + model** when an export re-encoded it
+  (D08.2, new test; derived benchmark photos load identically, so no benchmark number moves). **152 tests.**
+- **`docs/DEVICE_MATRIX.md`**: tier × iPhone 15/16/17 (Pro and non-Pro), iPad Pro, Android; "runs; not tested on this phone" everywhere
+  except the evaluator's Stray captures and inputs derived from them; accuracy linked to `eval/`.
+- **`README.md`**: clone → `uv sync` → `scripts/fetch_data.sh` → `scripts/fetch_weights.sh` → `uv run fp run data/stray/c00a170fe1`
+  (75 s cold, 33 s warm, checked by the writer). The 15-minute clean-machine run itself is work order 10.
+- **`docs/REPORT.md` / `docs/REPORT.pdf`: 6 pages** (`uv run python scripts/export_report.py`; headless Chrome). Architecture SVG,
+  drift ablation figure, error budget, calibration, fix loop from `fixloop/RESULT.md`, failure modes. Numbers link to `eval/` or
+  `fixloop/`; the few only in STATUS/plan.json say so.
+- **`COMPLIANCE.md`**: 79 rows over the brief's **157 atomic requirements**, extracted independently by a subagent that read only the
+  brief (`docs/brief/requirements.md`). `uv run python scripts/check_compliance.py`: 157/157 covered, 150 paths, all exist.
+- **Data**: `scripts/fetch_data.sh` downloads from HF dataset `$FP_DATA_REPO` (default `suchith83/floorplan-data`): `zips/`,
+  `derived/`, `own/`, `cache/recon` (+ sha256 manifest), `cache/damage`; only what's missing; unzips the Stray captures.
+  `scripts/fetch_weights.sh` pre-downloads the 3 public model repos. **Not done: the dataset doesn't exist.** The local HF token is
+  invalid, and an upload script was blocked by the session's permission rules, so publishing is the author's manual step (below).
+- **Known issues found on the way:** BENCHMARK's cross-tier table and its photo-stitch rows use different photo references
+  (24.48 vs 17.71 m² on c00a: the gate clips to the photo selection polygons; the report uses the gate rows). `eval/CALIBRATION.md`'s
+  "incoherence" note still says "3 rooms / 9 walls" (now 4 / 12; not fixed here).
+  Defense 07 numbers are pre-09 (a note now says so).
+- **What 10 needs:** (1) the author publishes the data (`hf auth login`, then upload `data/zips` → `zips/`, `data/derived` → `derived/`, `out/_cache/recon/*.npz` + a `manifest.json`
+  (`{file: sha256}`) → `cache/recon/`, `out/_cache/damage` → `cache/damage/`, later `data/own` → `own/`, into a private dataset) and pushes `main` + tags; (2) the cold run follows `README.md` literally from a fresh clone.
 ## 09 — The fix loop: **done; gate moved 105 % → 76 % p90 as predicted, still FAIL**
 - **Gate:** c7d2 video wall lengths ±3 % vs the LiDAR plan. Before **p90 105 %** (footprint −79 %, 13.2 vs 62.6 m²); predicted
   76 % / +22 %; after **p90 76 %, median 37 %, footprint +22 % (76.5 m²), IoU 0.18 → 0.59**. Still FAIL (25.5× the threshold).
