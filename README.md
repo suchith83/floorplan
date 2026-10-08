@@ -28,7 +28,8 @@ need the big model, but the video and photo tiers will be much slower on CPU (no
 git clone https://github.com/suchith83/floorplan.git
 cd floorplan
 uv sync                          # Python 3.12 + dependencies from uv.lock
-scripts/fetch_data.sh            # sample captures, derived camera-tier inputs, ground truth, model-output cache
+mkdir -p data/zips               # copy the three sample zips here (see "Sample data" below)
+scripts/fetch_data.sh            # unpacks data/zips/ into data/stray/<id>/
 scripts/fetch_weights.sh         # model weights into the Hugging Face cache (optional: they also download on first use)
 uv run fp run data/stray/c00a170fe1
 ```
@@ -42,9 +43,15 @@ out/c00a170fe1/report.html   plan, numbers with intervals, warnings, damage, sco
 out/c00a170fe1/debug/        one image per pipeline stage
 ```
 
-`fetch_data.sh` downloads from the Hugging Face dataset named in `FP_DATA_REPO` (default `suchith83/floorplan-data`).
-If it stops with **401 / Repository Not Found**, the dataset is still private: run `uv run hf auth login` with a token
-that has read access (ask the author for access), then rerun the script. It downloads only what is missing.
+**Sample data.** The raw captures are not in git and the Hugging Face dataset is not published. Get the three
+sample zips from the link Bhavana sent with the brief (`single_room.zip`, `single_scan_floor_only.zip`,
+`single_scan_with_ceiling.zip`, 0.8 GB together), put them in `data/zips/`, then run `scripts/fetch_data.sh`. It tries
+the dataset `FP_DATA_REPO` (default `suchith83/floorplan-data`) first; when that fails it prints a warning and unpacks
+the local zips into `data/stray/<id>/`. Without the dataset there is no model-output cache, so camera-tier runs are
+live. The video and photo inputs cut from the sample captures are rebuilt with
+`uv run python scripts/make_camera_tiers.py data/stray/c00a170fe1 data/stray/c7d28f72c6` (it first makes a LiDAR
+reference plan of each capture, a few minutes).
+
 `fetch_weights.sh` pre-downloads `facebook/map-anything-apache` (depth and poses for video and photos, 4.9 GB),
 `IDEA-Research/grounding-dino-tiny` and `facebook/sam2.1-hiera-small` (damage detection, 0.9 GB together). The
 LiDAR tier needs only the two damage models, so the first LiDAR plan does not wait for the 4.9 GB download.

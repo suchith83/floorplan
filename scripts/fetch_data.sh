@@ -14,6 +14,7 @@
 #   scripts/fetch_data.sh --no-cache   # inputs only; every model then runs live
 # A private dataset needs `hf auth login` (or HF_TOKEN) first; a public one needs nothing.
 # If you already have the evaluator's zips, put them in data/zips/ and the download of the zips is skipped.
+# If the download fails (dataset not published, offline) the script warns and continues with data/zips/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -37,12 +38,18 @@ done
 if [ $WITH_CACHE = 1 ] && [ ! -f out/_cache/recon/manifest.json ]; then patterns="$patterns cache/*"; fi
 if [ -n "$patterns" ]; then
 echo "download from datasets/$REPO:$patterns"
-uv run python - "$REPO" $patterns <<'EOF'
+# The dataset may not be reachable (not published, no login, offline): then carry on with whatever is in
+# data/zips/ instead of stopping, and say what is missing at the end.
+if ! uv run python - "$REPO" $patterns <<'EOF'
 import sys
 from huggingface_hub import snapshot_download
 repo, patterns = sys.argv[1], sys.argv[2:]
 snapshot_download(repo_id=repo, repo_type="dataset", local_dir="data/_hf", allow_patterns=patterns)
 EOF
+then
+  echo "warning  download from datasets/$REPO failed; using the local zips in data/zips/ only" >&2
+  echo "         (put the evaluator's sample zips there: single_room.zip, single_scan_floor_only.zip, single_scan_with_ceiling.zip)" >&2
+fi
 fi
 
 # 2. Put each part in place.
@@ -84,4 +91,8 @@ for pair in $ZIPS; do
     echo "missing  data/stray/$id (not in data/zips/ and not downloaded)" >&2
   fi
 done
+if [ ! -d data/derived ]; then
+  echo "note     data/derived/ (video and photo inputs cut from the Stray captures) was not downloaded; make it with" >&2
+  echo "         uv run python scripts/make_camera_tiers.py data/stray/c00a170fe1 data/stray/c7d28f72c6" >&2
+fi
 echo "done: data/stray/, data/derived/$( [ -d data/own ] && echo ', data/own/')$( [ $WITH_CACHE = 1 ] && echo ', out/_cache/')"
