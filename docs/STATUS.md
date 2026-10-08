@@ -398,4 +398,14 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
   the two rooms (synthetic test: 2 rooms → 1). The fix recovers area, not room structure (c7d2 video R1 = 61 m²).
 - **What 08/10 need:** copy `fixloop/RESULT.md` into the report's fix-loop section. The remaining cause is the camera-tier poses
   (Sim(3) of the video path vs LiDAR: scale 0.48, residual 2.4 m), which is the next thing to fix after the deadline.
-## 10 — Cold-run rehearsal: not started
+## 10 — Cold-run rehearsal: **done in part (time); one crash found and fixed**
+- **Data:** the Hugging Face dataset is not published and will not be. `scripts/fetch_data.sh` now warns and falls back to the
+  local `data/zips/`; the README says the evaluator gets the sample zips from Bhavana's link and puts them there.
+- **Fresh clone → first plan: 2 min 10 s** (clone 1 s, `uv sync` 2 s on a warm uv cache, fetch 14 s with the zips copied in,
+  `fp run data/stray/c00a170fe1` 112 s); plan identical to the main checkout. A cold uv/HF cache was not tested. `docs/COLD_RUN.md`.
+- **Unseen-input matrix** (live, `--no-cache`): Stray truncated to 40 % (crashed, fixed: 51 s, 2 rooms, partial-room warning);
+  2 photos per room (51 s, R2/R3 unplaced with a re-capture message); junk files in a photo folder (78 s, 2 unreadable skipped
+  with a warning); path with spaces (80 s, same plan).
+- **The crash:** drift metrics were NaN for a scan with >= 2 submaps and no loop candidates, so `plan.json` failed schema
+  validation. `fp/cli.py` now writes them as null. Any one-way scan would have hit it.
+- **Walk-in script:** `docs/WALKIN.md`. **Not done (time):** mixed HEIC/JPEG + orientation, the video stress case, the runtime budget.

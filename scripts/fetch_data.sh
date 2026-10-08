@@ -95,4 +95,4 @@ if [ ! -d data/derived ]; then
   echo "note     data/derived/ (video and photo inputs cut from the Stray captures) was not downloaded; make it with" >&2
   echo "         uv run python scripts/make_camera_tiers.py data/stray/c00a170fe1 data/stray/c7d28f72c6" >&2
 fi
-echo "done: data/stray/, data/derived/$( [ -d data/own ] && echo ', data/own/')$( [ $WITH_CACHE = 1 ] && echo ', out/_cache/')"
+echo "done: data/stray/$( [ -d data/derived ] && echo ', data/derived/')$( [ -d data/own ] && echo ', data/own/')$( [ -f out/_cache/recon/manifest.json ] && echo ', out/_cache/')"

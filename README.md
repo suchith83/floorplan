@@ -87,7 +87,7 @@ Model outputs are cached under `out/_cache/`, keyed by the input bytes. A rerun 
 ## Reproduce every number
 
 ```sh
-uv run pytest -q          # 151 unit tests on synthetic inputs, no data needed
+uv run pytest -q          # 152 unit tests on synthetic inputs, no data needed
 make benchmark            # every sample capture, every tier; refits the intervals; writes eval/BENCHMARK.md (~16 min)
 make benchmark-tables     # rebuild the tables from the plans already in out/ (seconds)
 make fix-before           # fix loop: rerun the whole benchmark at the tag before the fix (~16 min) -> fixloop/before/

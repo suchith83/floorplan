@@ -61,7 +61,7 @@ capture (a reference, not truth), and openings by eye.
 | 57, 58, 59 | Same rooms at all three tiers, multi-room included, photos as room folders | `scripts/make_camera_tiers.py`, `eval/BENCHMARK.md` | Video and photo-folder inputs cut from the same Stray captures | Partial: derived from the sample data, not captured on a phone |
 | 60 | One room captured twice, same tier | `eval/repeatability_lidar.md` | LiDAR: the two whole-flat scans | Partial: camera-tier repeats pending own capture |
 | 61, 63 | Laser or tape ground truth on everything, submitted | `eval/ground_truth/TEMPLATE.yaml`, `eval/match_gt.py` | Format, matcher and scorer ready | Not done: no tape on the sample data; own tape pending |
-| 62 | Raw sensor data submitted | `scripts/fetch_data.sh` | Fetches the raw captures from a Hugging Face dataset | Partial: the dataset is not published yet (needs the author's login and approval) |
+| 62 | Raw sensor data submitted | `scripts/fetch_data.sh` | Unpacks the evaluator's sample zips from `data/zips/`; tries a Hugging Face dataset first and falls back to the local zips | Not done: dataset not published, time. The evaluator's own sample zips are the raw data (README: put them in `data/zips/`) |
 
 ## Part 2: gates
 
@@ -111,15 +111,15 @@ capture (a reference, not truth), and openings by eye.
 | 119 | Compliance matrix | `COMPLIANCE.md`, `scripts/check_compliance.py` | This file; the script checks coverage and paths | Done |
 | 120, 121 | Capture route + device matrix | `CAPTURE_PROTOCOL.md`, `docs/DEVICE_MATRIX.md` | Route 2 protocol, device matrix | Done |
 | 122, 125 | Repo, one command per capture | `README.md`, `fp/cli.py` | `uv run fp run <capture>` | Done |
-| 123, 124 | README to running in < 15 min on a clean machine | `README.md`, `scripts/fetch_data.sh`, `scripts/fetch_weights.sh` | `uv sync` → fetch → `fp run` | Partial: the clean-machine run is work order 10; the data download needs the dataset published |
-| 126, 127, 128 | Reproduction bundle: every number from raw inputs; cache deterministic; live path runs | `Makefile` (`benchmark`), `eval/run_benchmark.py`, `fp/recon/camera.py`, `scripts/cache_sync.py` | `make benchmark` regenerates every table; MapAnything cache keyed by input bytes; live replay byte-identical outside timings | Partial: the cache and raw data are not published yet |
+| 123, 124 | README to running in < 15 min on a clean machine | `README.md`, `scripts/fetch_data.sh`, `scripts/fetch_weights.sh` | `uv sync` → zips into `data/zips/` → fetch → `fp run` | Done: fresh clone to the first plan in 2 min 10 s, warm uv/HF caches ([docs/COLD_RUN.md](docs/COLD_RUN.md)); a truly cold machine adds the uv and weight downloads |
+| 126, 127, 128 | Reproduction bundle: every number from raw inputs; cache deterministic; live path runs | `Makefile` (`benchmark`), `eval/run_benchmark.py`, `fp/recon/camera.py`, `scripts/cache_sync.py` | `make benchmark` regenerates every table; MapAnything cache keyed by input bytes; live replay byte-identical outside timings | Partial: raw data and cache not published (not done: dataset not published, time); without the cache every camera-tier run is live |
 | 129 | Benchmark: gates at all three tiers | `eval/BENCHMARK.md` | 27 gate rows, PASS 3 / FAIL 13 / NOT SCORED 10 / NOT DONE 1 | Done (as measured) |
 | 130 | Repeatability table | `eval/BENCHMARK.md`, `eval/repeatability_lidar.md` | LiDAR pair table; own repeats pending | Partial |
 | 131 | Head-to-head table | `eval/HEAD_TO_HEAD.md` | Empty table and protocol | Not done (see Part 3) |
 | 132 | Timing | `eval/BENCHMARK.md` | Per-stage timings per capture | Done |
 | 133 | Fix loop bundle | `fixloop/FIX_DECLARATION.md`, `fixloop/RESULT.md`, `fixloop/before/BENCHMARK.md`, `fixloop/after/BENCHMARK.md` | Declaration, result, both runs, diff | Done |
 | 134–141 | Technical report ≤ 6 pages: architecture, tiers + device matrix, drift, error budget, calibration, fix loop, failure modes | `docs/REPORT.md`, `docs/REPORT.pdf`, `docs/img/architecture.svg` | Every section, PDF export ≤ 6 pages (`scripts/export_report.py`) | Done |
-| 142 | Raw data: sensor logs | `scripts/fetch_data.sh` | Stray Scanner sample captures and derived camera inputs on HF | Partial: dataset not published yet; own sensor logs pending |
+| 142 | Raw data: sensor logs | `scripts/fetch_data.sh` | Stray Scanner sample captures (evaluator's zips); derived camera inputs rebuilt by `scripts/make_camera_tiers.py` | Not done: dataset not published, time; own sensor logs pending |
 | 143 | Raw data: ground truth | `eval/ground_truth/c7d28f72c6.openings_by_eye.yaml` | By-eye opening labels | Not done: no tape exists yet |
 | 144 | Raw data: app exports | `eval/HEAD_TO_HEAD.md` | Slot: `data/own/app_export/` | Not done: pending own capture |
 
@@ -127,7 +127,7 @@ capture (a reference, not truth), and openings by eye.
 
 | req # | requirement | path | artifact | status |
 |---|---|---|---|---|
-| 145, 147 | Unseen space, their iPhone, cold run in front of them | `README.md`, `fp/cli.py` | Live path on a laptop (MPS/CPU); no cloud calls; weights pre-fetched | Partial: rehearsal is work order 10 |
+| 145, 147 | Unseen space, their iPhone, cold run in front of them | `README.md`, `fp/cli.py`, `docs/WALKIN.md`, `docs/COLD_RUN.md` | Live path on a laptop (MPS/CPU); no cloud calls; weights pre-fetched; walk-in script; unseen-input matrix (truncated scan, 2 photos/room, junk files, path with spaces: 4/4 give a plan after one crash fix) | Partial: rehearsed on sample-derived inputs only; video with fast pan / dark / mirror not run (time) |
 | 146 | Route followed exactly | `CAPTURE_PROTOCOL.md` | Literal-reader checked | Done |
 | 148 | Accurate against their laser | `docs/DEVICE_MATRIX.md`, `eval/BENCHMARK.md` | Honest accuracy per tier | Partial: camera tiers far off (median wall error 37–39 %) |
 | 149 | All three tiers ready on the day | `fp/ingest/__init__.py` | All three run end to end; c7d2 video ~8.5 min live | Done (runs); accuracy as above |
@@ -139,7 +139,7 @@ capture (a reference, not truth), and openings by eye.
 | 150 | Handheld consumer capture only | `CAPTURE_PROTOCOL.md` | Phone apps only | Done |
 | 151 | Pretrained models disclosed | `docs/REPORT.md`, `scripts/fetch_weights.sh`, `docs/DECISIONS.md` (D05.1, D06.1) | MapAnything (Apache-2.0), Grounding DINO tiny, SAM 2.1 small; SAM 3 optional on Modal | Done |
 | 152 | Runs without calling our infrastructure | `fp/recon/camera.py`, `fp/damage/detect_local.py` | Local by default; Modal only with `--backend modal` | Done |
-| 153 | Weights and large binaries fetched by script | `scripts/fetch_weights.sh`, `scripts/fetch_data.sh` | Nothing large in git (largest tracked file < 5 MB) | Done (data script waits on the dataset being published) |
+| 153 | Weights and large binaries fetched by script | `scripts/fetch_weights.sh`, `scripts/fetch_data.sh` | Nothing large in git (largest tracked file < 5 MB) | Done (the data script falls back to local `data/zips/`) |
 | 154 | Mirrors | `fp/geometry/openings.py` (mirror test), `docs/REPORT.md` | Reflected points landing on the room are rejected; one vanity mirror still a phantom | Partial |
 | 155 | Glass | `docs/REPORT.md`, `fixloop/RESULT.md` | Documented: glazed slider called a passage; glass merges rooms on camera tiers | Partial: documented, not handled |
 | 156 | Wet-look surfaces | `docs/REPORT.md`, `fp/recon/lidar_fuse.py` | Confidence-2 filter drops unreliable depth; failure mode documented | Partial: not tested on a wet-look floor |
