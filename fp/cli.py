@@ -295,7 +295,9 @@ def _drift_report(debug, plan, P, N, cams, ceiling_h, rec, drift, enabled, tier,
               "rooms_off": len(rooms_off), "rooms_on": len(plan["rooms"]),
               "footprint_m2_off": round(sum(r["area_m2"] for r in rooms_off), 2),
               "footprint_m2_on": round(sum(r["floor_area"]["value"] for r in plan["rooms"]), 2)})
-    plan["drift"] = {"method": res.method, "enabled": True, "metrics": m}
+    # NaN (no loop to score, e.g. a scan stopped early) is not valid JSON: the plan says null, "not measured"
+    plan["drift"] = {"method": res.method, "enabled": True,
+                     "metrics": {k: (v if np.isfinite(v) else None) for k, v in m.items()}}
     hb, ha = m.get("heading_spread_before_deg", np.nan), m.get("heading_spread_after_deg", np.nan)
     if ha > hb + HEADING_WORSE_DEG:   # loop RMSE only scores accepted loops; drift too big to accept stays hidden there
         warn("drift", f"Drift correction widened the heading spread across submaps ({hb:.2f} -> {ha:.2f} deg): "
