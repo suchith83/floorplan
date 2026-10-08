@@ -66,3 +66,36 @@ def test_rank_rooms_names_a_long_narrow_room_connector():
     plan = {"source": {}, "warnings": []}
     out, _ = rank_rooms(rooms, [], CaptureBundle("lidar", []), np.eye(4), plan, lambda *a: None)
     assert [(r["id"], r["name"]) for r in out] == [("R1", "R1"), ("R2", "connector"), ("R3", "R3")]
+
+
+def _rays(cams, targets):
+    """Each camera sees every target point (plan coords): one ray per camera -> point."""
+    return [(c, targets) for c in cams]
+
+
+def test_a_wall_that_other_frames_saw_through_is_not_cut_on_predicted_depth():
+    """Work order 09: a misregistered copy of a wall stands in the middle of one 6 x 3 m room. Frames on both sides
+    look straight through it at the end walls, so on a camera-tier cloud it isn't a partition."""
+    parts = [_floor(0, 6, 0, 3), _wall(1, 0.0, 0, 6, +1), _wall(1, 3.0, 0, 6, -1), _wall(0, 0.0, 0, 3, +1),
+             _wall(0, 6.0, 0, 3, -1), _wall(0, 3.0, 0, 3, -1)]           # the phantom: x = 3, no door
+    P = np.concatenate([p for p, _ in parts])
+    N = np.concatenate([n for _, n in parts])
+    cams = np.array([[x, y, 1.4] for x in np.r_[np.linspace(0.8, 2.2, 4), np.linspace(3.8, 5.2, 4)]
+                     for y in np.linspace(0.2, 2.8, 5)])
+    ends = np.array([[0.0, y, 1.2] for y in np.linspace(0.05, 2.95, 30)] + [[6.0, y, 1.2] for y in np.linspace(0.05, 2.95, 30)])
+    rays = _rays(cams, ends)
+    cut, _, _ = extract_rooms(P, N, None, 0.01, 1.0, rays, cams)
+    kept, _, dbg = extract_rooms(P, N, None, 0.01, 1.0, rays, cams, predicted_depth=True)
+    assert len(cut) == 2                                   # LiDAR rule: every tall surface is a wall
+    assert len(kept) == 1 and abs(kept[0]["area_m2"] - 18.0) < 1.0
+    assert dbg["phantom_m2"] > 0
+
+
+def test_a_real_partition_stays_on_predicted_depth():
+    """Rays that end on the partition (each side sees its own room) don't remove it."""
+    P, N, cams = _two_rooms(door=(1.0, 1.0001))
+    cams = np.concatenate([cams[:20], cams[-20:]])
+    rays = [(c, np.array([[3.0 if c[0] < 3 else 3.1, y, 1.2] for y in np.linspace(0.3, 2.7, 9)]
+                         + [[0.0 if c[0] < 3 else 6.1, y, 1.2] for y in np.linspace(0.3, 2.7, 9)])) for c in cams]
+    rooms, _, dbg = extract_rooms(P, N, None, 0.01, 1.0, rays, cams, predicted_depth=True)
+    assert len(rooms) == 2
