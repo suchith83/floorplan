@@ -446,3 +446,20 @@ numbered D05.x so the merge doesn't clash. -->
 - `lo` is clipped at 0: every plan quantity is a length, area or count, and the fitted camera-tier intervals
   (±241 % / ±312 % of a wall) would otherwise go negative.
 - `fp/calibration.json` makes unit tests depend on the last benchmark; tests/conftest.py pins them to D5.
+
+## D09.1. Fix loop target and fix: camera-tier phantom walls, not the 3 % gate itself
+- **Context.** Worst gate: c7d2 video wall lengths, p90 105 % vs 3 %; footprint 13.2 vs 62.6 m². Replaying `extract_rooms` step by step
+  shows the error enters in the room split: 78 % of the free floor is dropped as seedless slivers between "tall walls", and 82 % of
+  those tall cells were seen through by ≥ 3 frames, so they are copies of walls from misregistered parts of the capture. The camera
+  tiers get no drift correction (`drift_correction and tier == "lidar"`), so the 03 stitch's wall cut sees them as partitions.
+  Upstream, the MapAnything poses are poor (Sim(3) of the video path to the LiDAR odometry: scale 0.48, median residual 2.4 m), so no
+  plan-stage fix can reach ±3 %.
+- **Options.** (a) the ray rule on every tier; (b) a pass-versus-hit vote; (c) cut only tall cells that lie on axis wall lines;
+  (d) give seedless floor to the nearest room; (e) fall back to one room when the floor is shredded; (f) the ray rule on
+  predicted depth only; (g) fix the MapAnything chunk merge and poses (a work order of its own: new model passes, uncertain result).
+- **Choice.** (f). (a)–(c) remove real LiDAR walls (42–75 %, 44 % and 9 rooms → 8 respectively) and would move the reference.
+  (d) gives p90 142 %. (e) gives one 82 m² room that matches no LiDAR room, so no wall could be scored. (f) leaves LiDAR untouched by
+  construction and adds no new tuned constant (MIN_RAY_HITS already defines seen-through free space; the 10 cm stop-short value is
+  insensitive from 5 to 20 cm). A warning now names any floor still left in no room.
+- **Evidence.** `fixloop/FIX_DECLARATION.md` (committed before the fix) and `fixloop/RESULT.md`. The orange cells in
+  `out/c7d28f72c6-video/debug/rooms_split.png` are the ignored phantom walls.

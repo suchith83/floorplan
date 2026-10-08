@@ -67,3 +67,10 @@ So the footprint swung from −79 % to +22 %, and the walls are still 37 % off a
 camera-tier poses: denser keyframes and chunk overlap, or a pose-graph and loop-closure pass like the LiDAR tier's. That means
 new model passes, and it is out of scope for a plan-stage fix. A cost of the fix: on c00a video the single room now
 overshoots (+19 %), where before it undershot (−12 %).
+
+## Known limitation (found by the verifier)
+On camera tiers, a **real wall that ≥ 3 frames see through** is removed: a glass partition, or a misregistered frame whose
+rays cross a real wall. In a synthetic test, two rooms with a solid partition became one 18.3 m² room when room A's frames
+"saw" room B's far wall. The fix recovers floor area, not room structure. On c7d2 video, R1 (61 m²) still merges most of the
+rooms LiDAR splits into 9. An independent rerun reproduced every after number (p90 76 %, footprint +22 %, IoU 0.591), and
+the LiDAR plans are identical before and after (ids, areas, walls, polygons).

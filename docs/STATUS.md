@@ -350,5 +350,23 @@ hand-off: done / not done, real numbers, known bugs, and what the next work orde
 - **Next:** `Execute prompts/09-fix-loop.md` on the worst gate above. Own captures, when they exist: `data/own/` +
   `eval/ground_truth/own.yaml` (from TEMPLATE.yaml; A0, converting `ground_truth_raw.txt`, is still to do), then `make benchmark`.
 ## 08 — Capture protocol, device matrix, README, report, compliance matrix: not started
-## 09 — The fix loop: not started
+## 09 — The fix loop: **done; gate moved 105 % → 76 % p90 as predicted, still FAIL**
+- **Gate:** c7d2 video wall lengths ±3 % vs the LiDAR plan. Before **p90 105 %** (footprint −79 %, 13.2 vs 62.6 m²); predicted
+  76 % / +22 %; after **p90 76 %, median 37 %, footprint +22 % (76.5 m²), IoU 0.18 → 0.59**. Still FAIL (25.5× the threshold).
+- **Root cause** (`fixloop/FIX_DECLARATION.md`, committed before the fix): the 03 stitch cut every tall surface as a wall. Camera
+  tiers have no drift correction, so misregistered wall copies (82 % of their tall cells were seen through by ≥ 3 frames) chopped
+  the floor into 195 slivers, and `split_rooms` silently dropped the 78 % that had no seed. Ruled out with one-change experiments:
+  the ray rule on LiDAR removes 42–75 % of real walls; nearest-room assignment gives p90 142 %; a one-room fallback matches no
+  LiDAR room.
+- **Fix:** `fp/geometry/plan.py` `seen_through_walls` (camera tiers only, `predicted_depth=tier != "lidar"`), plus warnings for
+  ignored wall surface and for floor left in no room. LiDAR and photo plans unchanged. 151 tests.
+- **Side effects:** c00a video footprint −12 % → +19 %, p90 63 → 71 %. The video calibration gate went 78 % → 92 % PASS, but only
+  because the refit **widened** the video wall b from 2.41 to 4.09; that is not an accuracy gain. Status: PASS 3, FAIL 13.
+- **Reproduce:** `make fix-before` / `make fix-after` (~16 min each; temporary worktree at the tag, `data/` and `out/_cache`
+  linked). `eval/BENCHMARK.md`, `fp/calibration.json` = the fix-after run. Debug: `fixloop/{before,after}/c7d28f72c6-video/rooms_split.png`
+  (orange = ignored seen-through walls).
+- **Known limitation** (verifier): on camera tiers, glass or a misregistered frame seeing through a real partition merges
+  the two rooms (synthetic test: 2 rooms → 1). The fix recovers area, not room structure (c7d2 video R1 = 61 m²).
+- **What 08/10 need:** copy `fixloop/RESULT.md` into the report's fix-loop section. The remaining cause is the camera-tier poses
+  (Sim(3) of the video path vs LiDAR: scale 0.48, residual 2.4 m), which is the next thing to fix after the deadline.
 ## 10 — Cold-run rehearsal: not started
